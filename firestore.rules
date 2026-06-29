@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Security rules for the Rummikub Online game documents.
+//
+// Trust model: turn *legality* is enforced by the game engine in the browser
+// (Firestore cannot run game logic without Cloud Functions). These rules make
+// sure only authenticated players can touch a game, that a game is created in a
+// sane initial state, and that only the two participants — or a single new
+// player claiming the empty guest seat — may write to it.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /games/{roomCode} {
+
+      function isAuthed() {
+        return request.auth != null;
+      }
+
+      function isParticipant(data) {
+        return isAuthed()
+          && (request.auth.uid == data.hostId || request.auth.uid == data.guestId);
+      }
+
+      // A signed-in user may read a single game by its code (required to join).
+      // Listing the whole collection is forbidden so codes stay unguessable.
+      allow get: if isAuthed();
+      allow list: if false;
+
+      // A new game must be created by its own host and start in the waiting
+      // state with no guest yet.
+      allow create: if isAuthed()
+        && request.resource.data.hostId == request.auth.uid
+        && request.resource.data.guestId == null
+        && request.resource.data.status == 'waiting';
+
+      // Participants may update the game. A non-participant may only write the
+      // single change that claims the empty guest seat for themselves.
+      allow update: if isParticipant(resource.data)
+        || (isAuthed()
+            && resource.data.guestId == null
+            && request.resource.data.guestId == request.auth.uid
+            && request.resource.data.hostId == resource.data.hostId);
+
+      allow delete: if false;
+    }
+  }
+}

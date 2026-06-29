@@ -1,0 +1,106 @@
+/**
+ * tiles.css
+ * The look of an individual Rummikub tile and its drag behaviour.
+ */
+
+:root {
+  --tile-width: 46px;
+  --tile-height: 64px;
+}
+
+.tile {
+  position: relative;
+  width: var(--tile-width);
+  height: var(--tile-height);
+  border-radius: 8px;
+  background:
+    linear-gradient(160deg, #fbf4e3 0%, var(--tile-face) 55%, var(--tile-face-shadow) 100%);
+  box-shadow: var(--shadow-tile), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.5rem;
+  line-height: 1;
+  user-select: none;
+  touch-action: none; /* let the pointer-based drag handler own gestures */
+  cursor: grab;
+  flex: 0 0 auto;
+}
+
+/* A small notch at the bottom evokes the physical tile's rounded foot. */
+.tile::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.18;
+}
+
+.tile__value {
+  margin-bottom: 10px; /* sit above the decorative notch */
+}
+
+/* Colour variants drive the printed number colour. */
+.tile--red {
+  color: var(--tile-red);
+}
+.tile--blue {
+  color: var(--tile-blue);
+}
+.tile--yellow {
+  color: var(--tile-yellow);
+}
+.tile--black {
+  color: var(--tile-black);
+}
+
+/* Joker: a smiling face icon instead of a number. */
+.tile--joker {
+  color: var(--tile-red);
+}
+
+.tile--joker .tile__value {
+  font-size: 1.7rem;
+}
+
+/* States */
+.tile--dragging {
+  opacity: 0.35;
+}
+
+.tile--ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  cursor: grabbing;
+  transform: scale(1.06);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+  margin: 0;
+}
+
+.tile--selected {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* When tiles cannot be moved (not your turn) dim the grab affordance. */
+.rack--locked .tile,
+.board--locked .tile {
+  cursor: default;
+}
+
+/* Face-down tile used to represent the opponent's hidden hand. */
+.tile--back {
+  background:
+    repeating-linear-gradient(45deg, #2c3a4d 0 6px, #243140 6px 12px);
+  box-shadow: var(--shadow-tile);
+  color: transparent;
+}
+
+.tile--back::after {
+  display: none;
+}

@@ -1,0 +1,129 @@
+/**
+ * lobby.css
+ * Styling for the lobby (create/join) and the waiting-for-opponent screen.
+ */
+
+.lobby,
+.waiting {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.lobby__card,
+.waiting__card {
+  width: min(440px, 100%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+
+.lobby__title {
+  margin: 0;
+  font-size: 2.4rem;
+  letter-spacing: 0.5px;
+}
+
+.lobby__title-accent {
+  color: var(--color-accent);
+}
+
+.lobby__subtitle {
+  margin: var(--space-2) 0 var(--space-6);
+  color: var(--color-text-muted);
+}
+
+.lobby__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.lobby__actions .btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 1.05rem;
+}
+
+.lobby__divider {
+  position: relative;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.lobby__divider::before,
+.lobby__divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 38%;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.lobby__divider::before {
+  left: 0;
+}
+
+.lobby__divider::after {
+  right: 0;
+}
+
+.lobby__join {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.lobby__input {
+  flex: 1;
+  font: inherit;
+  font-size: 1.2rem;
+  letter-spacing: 4px;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-soft);
+  color: var(--color-text);
+}
+
+.lobby__input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.lobby__join .btn {
+  width: auto;
+  white-space: nowrap;
+}
+
+.lobby__message {
+  min-height: 1.2em;
+  margin: var(--space-4) 0 0;
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+/* ---------------------------- Waiting ---------------------------- */
+.waiting__hint {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.waiting__code {
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 8px;
+  color: var(--color-accent);
+  background: var(--color-bg-soft);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin: var(--space-3) 0 var(--space-4);
+}

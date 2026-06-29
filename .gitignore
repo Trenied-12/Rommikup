@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*.log
+
+# Keep firebase-config.js in the repo (web config is not secret), but if you
+# prefer to keep yours private, uncomment the next line and ship an example.
+# js/firebase/firebase-config.js

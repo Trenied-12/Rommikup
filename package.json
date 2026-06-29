@@ -1,0 +1,12 @@
+{
+  "name": "rummikub-online",
+  "version": "1.0.0",
+  "description": "Online two-player Rummikub — static frontend (GitHub Pages) with a Firebase/Firestore backend.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": ["rummikub", "firebase", "firestore", "multiplayer", "game"],
+  "license": "MIT"
+}

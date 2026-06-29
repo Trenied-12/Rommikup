@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Rummikub online für zwei Spieler – Echtzeit-Multiplayer im Browser." />
+    <title>Rummikub Online</title>
+
+    <link rel="stylesheet" href="./css/main.css" />
+    <link rel="stylesheet" href="./css/lobby.css" />
+    <link rel="stylesheet" href="./css/tiles.css" />
+    <link rel="stylesheet" href="./css/board.css" />
+  </head>
+  <body>
+    <!-- ===================== App root ===================== -->
+    <div id="app" class="app">
+      <!-- Lobby / start screen -->
+      <section id="lobby-screen" class="screen lobby" hidden>
+        <div class="lobby__card">
+          <h1 class="lobby__title">Rummikub<span class="lobby__title-accent"> RAWR</span></h1>
+          <p class="lobby__subtitle">LARA · VS · JONAS</p>
+
+          <div class="lobby__actions">
+            <button id="create-game-btn" class="btn btn--primary" type="button">
+              Neues Spiel erstellen
+            </button>
+
+            <div class="lobby__divider"><span>oder</span></div>
+
+            <form id="join-form" class="lobby__join" autocomplete="off">
+              <input
+                id="join-code-input"
+                class="lobby__input"
+                type="text"
+                inputmode="text"
+                maxlength="5"
+                placeholder="Raumcode"
+                aria-label="Raumcode eingeben"
+              />
+              <button class="btn btn--secondary" type="submit">Beitreten</button>
+            </form>
+          </div>
+
+          <p id="lobby-message" class="lobby__message" role="status"></p>
+        </div>
+      </section>
+
+      <!-- Waiting-for-opponent screen -->
+      <section id="waiting-screen" class="screen waiting" hidden>
+        <div class="waiting__card">
+          <div class="spinner" aria-hidden="true"></div>
+          <h2>Warte auf den zweiten Spieler …</h2>
+          <p class="waiting__hint">Teile diesen Code oder Link mit deinem Gegner:</p>
+          <div class="waiting__code" id="waiting-code">—</div>
+          <button id="copy-link-btn" class="btn btn--secondary" type="button">
+            Einladungslink kopieren
+          </button>
+        </div>
+      </section>
+
+      <!-- Main game screen -->
+      <section id="game-screen" class="screen game" hidden>
+        <header class="status-bar" id="status-bar">
+          <div class="status-bar__item">
+            <span class="status-bar__label">Am Zug</span>
+            <span class="status-bar__value" id="status-turn">—</span>
+          </div>
+          <div class="status-bar__item">
+            <span class="status-bar__label">Stapel</span>
+            <span class="status-bar__value" id="status-pool">—</span>
+          </div>
+          <div class="status-bar__item">
+            <span class="status-bar__label">Gegner-Steine</span>
+            <span class="status-bar__value" id="status-opponent">—</span>
+          </div>
+          <div class="status-bar__item status-bar__item--wide">
+            <span class="status-bar__label">Status</span>
+            <span class="status-bar__value" id="status-state">—</span>
+          </div>
+        </header>
+
+        <main class="board-area" id="board-area">
+          <div class="board" id="board" data-dropzone="new-meld">
+            <!-- Melds are rendered here -->
+          </div>
+        </main>
+
+        <footer class="rack-area">
+          <div class="rack" id="rack" data-dropzone="rack">
+            <!-- The current player's tiles are rendered here -->
+          </div>
+
+          <div class="controls" id="controls">
+            <button id="sort-color-btn" class="btn btn--ghost" type="button" title="Nach Farbe sortieren">
+              Farbe
+            </button>
+            <button id="sort-number-btn" class="btn btn--ghost" type="button" title="Nach Zahl sortieren">
+              Zahl
+            </button>
+            <button id="reset-turn-btn" class="btn btn--ghost" type="button">
+              Zurücksetzen
+            </button>
+            <button id="draw-btn" class="btn btn--secondary" type="button">
+              Stein ziehen
+            </button>
+            <button id="end-turn-btn" class="btn btn--primary" type="button">
+              Zug beenden
+            </button>
+          </div>
+        </footer>
+      </section>
+
+      <!-- Game-over overlay -->
+      <div id="gameover-overlay" class="overlay" hidden>
+        <div class="overlay__card">
+          <h2 id="gameover-title">Spiel beendet</h2>
+          <p id="gameover-text"></p>
+          <button id="play-again-btn" class="btn btn--primary" type="button">
+            Zur Lobby
+          </button>
+        </div>
+      </div>
+
+      <!-- Toast notifications -->
+      <div id="toast-container" class="toast-container" aria-live="polite"></div>
+    </div>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>
