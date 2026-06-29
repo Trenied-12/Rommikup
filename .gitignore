@@ -1,7 +1,15 @@
+# Lokale Tooling-Konfiguration (nie hochladen)
+.claude/
 node_modules/
 .DS_Store
 *.log
 
-# Keep firebase-config.js in the repo (web config is not secret), but if you
-# prefer to keep yours private, uncomment the next line and ship an example.
-# js/firebase/firebase-config.js
+# Nur zum Entwickeln – bleibt lokal, wird nicht auf GitHub Pages veröffentlicht
+tests/
+dev/
+package.json
+
+# Dokumentation & Konfig-Referenz – lokal behalten, nicht öffentlich
+README.md
+LICENSE
+firestore.rules
