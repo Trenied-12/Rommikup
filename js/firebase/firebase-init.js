@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { initializeFirestore } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 import { firebaseConfig } from './firebase-config.js';
 
@@ -18,5 +18,14 @@ const app = initializeApp(firebaseConfig);
 /** Shared Firebase Authentication instance. */
 export const auth = getAuth(app);
 
-/** Shared Cloud Firestore instance. */
-export const db = getFirestore(app);
+/**
+ * Shared Cloud Firestore instance.
+ *
+ * `experimentalAutoDetectLongPolling` lets the SDK fall back from WebSockets to
+ * long-polling on networks/devices (mobile data, strict proxies, some tablets)
+ * where the realtime stream would otherwise stall — this is the fix for "the
+ * opponent's move only appears after a manual refresh".
+ */
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});

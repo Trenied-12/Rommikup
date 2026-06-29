@@ -81,6 +81,9 @@
 
 .lobby__input {
   flex: 1;
+  /* Without this, the input's intrinsic min-width stops the flex row from
+     shrinking, which pushes the "Beitreten" button off-screen on phones. */
+  min-width: 0;
   font: inherit;
   font-size: 1.2rem;
   letter-spacing: 4px;

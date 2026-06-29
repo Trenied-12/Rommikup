@@ -20,7 +20,7 @@ import {
 } from '../models/working-turn.js';
 import { seatForUid } from '../models/game-state.js';
 import { commitTurn, drawTile } from '../game/game-engine.js';
-import { subscribeToGame, saveGame } from '../firebase/game-repository.js';
+import { subscribeToGame, saveGame, fetchGame } from '../firebase/game-repository.js';
 import { GAME_STATUS } from '../game/constants.js';
 
 export class GameController {
@@ -46,6 +46,7 @@ export class GameController {
 
     this.#bindControls();
     this.#setupDragAndDrop();
+    this.#bindVisibilityRefresh();
   }
 
   /**
@@ -174,6 +175,31 @@ export class GameController {
       this.stop();
       this.onExit();
     });
+  }
+
+  /**
+   * Mobile browsers suspend the realtime socket while a tab is backgrounded, so
+   * a move made by the opponent in the meantime can arrive late. When the tab
+   * becomes visible or regains focus again we pull the latest state once, so
+   * the player never has to refresh manually.
+   */
+  #bindVisibilityRefresh() {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') this.#refreshNow();
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+  }
+
+  /** Fetches the authoritative state once and applies it. */
+  async #refreshNow() {
+    if (!this.roomCode) return;
+    try {
+      const latest = await fetchGame(this.roomCode);
+      if (latest) this.#onState(latest);
+    } catch {
+      // A failed one-off refresh is harmless; the live listener stays active.
+    }
   }
 
   /** Creates the drag controller bound to the game screen. */
