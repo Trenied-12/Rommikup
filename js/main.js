@@ -12,6 +12,7 @@ import { ensureSignedIn } from './firebase/auth.js';
 import { createGame, joinGameByCode } from './firebase/game-repository.js';
 import { GameController } from './app/game-controller.js';
 import { ROOM_CODE_LENGTH } from './game/constants.js';
+import { getDeviceId } from './utils/device.js';
 
 /** Query-string key carrying a room code in an invite link. */
 const ROOM_PARAM = 'room';
@@ -19,6 +20,7 @@ const ROOM_PARAM = 'room';
 /** @type {?GameController} */
 let controller = null;
 let uid = null;
+let deviceId = null;
 
 /** Shows only the lobby screen and resets transient UI. */
 function showLobby() {
@@ -55,6 +57,7 @@ function getController() {
   if (!controller) {
     controller = new GameController({
       uid,
+      deviceId,
       onExit: () => {
         clearUrlRoom();
         showLobby();
@@ -75,7 +78,7 @@ function enterRoom(roomCode) {
 async function handleCreate() {
   byId('lobby-message').textContent = '';
   try {
-    const { roomCode } = await createGame(uid);
+    const { roomCode } = await createGame(uid, deviceId);
     enterRoom(roomCode);
   } catch (error) {
     byId('lobby-message').textContent = error.message;
@@ -96,7 +99,7 @@ async function handleJoin(rawCode) {
 
   byId('lobby-message').textContent = '';
   try {
-    await joinGameByCode(code, uid);
+    await joinGameByCode(code, uid, deviceId);
     enterRoom(code);
   } catch (error) {
     byId('lobby-message').textContent = error.message;
@@ -145,6 +148,8 @@ async function bootstrap() {
     showConfigError();
     return;
   }
+
+  deviceId = getDeviceId();
 
   try {
     uid = await ensureSignedIn();

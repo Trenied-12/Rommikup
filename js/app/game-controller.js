@@ -1,9 +1,12 @@
 /**
  * @file game-controller.js
  * @description Orchestrates a single game session on the client: it owns the
- * realtime subscription, the local working-turn copy, rendering and all user
- * actions (drag & drop, draw, end turn, sort, reset). It is the glue between
- * the pure engine, the Firebase repository and the DOM views.
+ * realtime subscription, the local working copy (board + own hand), rendering,
+ * the opponent-move highlights, the win/loss tally and all user actions (drag &
+ * drop, draw, end turn, sort, reset).
+ *
+ * The own hand can be re-ordered at any time — even when it is not the player's
+ * turn — while the board can only be edited on the player's own turn.
  */
 
 import { byId } from '../ui/dom.js';
@@ -18,35 +21,51 @@ import {
   applyDrop,
   withSortedHand,
 } from '../models/working-turn.js';
-import { seatForUid } from '../models/game-state.js';
+import { seatForUid, otherSeat } from '../models/game-state.js';
 import { commitTurn, drawTile } from '../game/game-engine.js';
+import { computeBoardDiff, isEmptyDiff } from '../game/board-diff.js';
 import { subscribeToGame, saveGame, fetchGame } from '../firebase/game-repository.js';
+import { recordResult, subscribeStats } from '../firebase/stats-repository.js';
 import { GAME_STATUS } from '../game/constants.js';
 
 export class GameController {
   /**
-   * @param {{ uid: string, onExit: () => void }} deps
+   * @param {{ uid: string, deviceId: string, onExit: () => void }} deps
    */
-  constructor({ uid, onExit }) {
+  constructor({ uid, deviceId, onExit }) {
     this.uid = uid;
+    this.deviceId = deviceId;
     this.onExit = onExit;
 
     /** @type {?import('../models/game-state.js').GameState} */
     this.state = null;
+    /** @type {?import('../models/game-state.js').GameState} */
+    this.prevState = null;
     /** @type {?import('../models/working-turn.js').WorkingTurn} */
     this.working = null;
-    /** The turn number the working copy was initialised from. */
-    this.syncedTurn = null;
+    /** The turn number our current board edits belong to. */
+    this.editingTurn = null;
+    /** Preferred order of the player's own tiles, as a list of tile ids. */
+    this.handOrder = [];
+    /** @type {?import('../game/board-diff.js').BoardDiff} */
+    this.highlights = null;
+
+    /** Live win/loss tallies for both players. */
+    this.stats = { you: null, opp: null };
+    this.statsUnsub = { you: null, opp: null };
+    this.subscribedDevices = { you: null, opp: null };
 
     this.roomCode = null;
     this.mySeat = null;
     this.unsubscribe = null;
     this.dragController = null;
     this.gameOverShown = false;
+    this.resultRecorded = false;
 
     this.#bindControls();
     this.#setupDragAndDrop();
     this.#bindVisibilityRefresh();
+    this.#bindHighlightClearing();
   }
 
   /**
@@ -67,10 +86,19 @@ export class GameController {
   stop() {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.statsUnsub.you?.();
+    this.statsUnsub.opp?.();
+    this.statsUnsub = { you: null, opp: null };
+    this.subscribedDevices = { you: null, opp: null };
     this.state = null;
+    this.prevState = null;
     this.working = null;
-    this.syncedTurn = null;
+    this.editingTurn = null;
+    this.highlights = null;
+    this.handOrder = [];
+    this.stats = { you: null, opp: null };
     this.gameOverShown = false;
+    this.resultRecorded = false;
   }
 
   // ----------------------------------------------------------------- private
@@ -83,25 +111,70 @@ export class GameController {
     );
   }
 
+  /** Reorders a tile list to match the player's preferred hand order. */
+  #orderedHand(tiles) {
+    const position = new Map(this.handOrder.map((id, index) => [id, index]));
+    return [...tiles]
+      .map((tile, index) => ({ tile, index }))
+      .sort((a, b) => {
+        const pa = position.has(a.tile.id) ? position.get(a.tile.id) : Number.MAX_SAFE_INTEGER;
+        const pb = position.has(b.tile.id) ? position.get(b.tile.id) : Number.MAX_SAFE_INTEGER;
+        return pa - pb || a.index - b.index;
+      })
+      .map((entry) => entry.tile);
+  }
+
+  /** Remembers the current hand ordering for use across re-syncs. */
+  #syncHandOrder() {
+    this.handOrder = this.working.hand.map((tile) => tile.id);
+  }
+
   /** Handles a fresh authoritative state from Firestore. */
   #onState(state) {
+    this.prevState = this.state;
     this.state = state;
     this.mySeat = seatForUid(state, this.uid);
 
     this.#updateScreens();
+    this.#ensureStatsSubscriptions();
 
-    if (this.#isMyTurn()) {
-      // (Re)initialise the working copy at the start of each of our turns.
-      if (!this.working || this.syncedTurn !== state.turnNumber) {
-        this.working = createWorkingTurn(state.board, state.hands[this.mySeat]);
-        this.syncedTurn = state.turnNumber;
-      }
-    } else {
-      this.working = null;
+    const myTurn = this.#isMyTurn();
+    const keepEdits = myTurn && this.editingTurn === state.turnNumber;
+
+    if (!keepEdits) {
+      // Rebuild the working copy from authoritative data (reflecting the
+      // opponent's board), keeping the player's preferred hand order.
+      const myHand = state.hands[this.mySeat] ?? [];
+      this.working = createWorkingTurn(state.board, this.#orderedHand(myHand));
+      if (myTurn) this.editingTurn = state.turnNumber;
     }
 
+    this.#updateHighlights(myTurn);
     this.#render();
+    this.#recordResultOnce();
     this.#maybeShowGameOver();
+  }
+
+  /**
+   * When a new turn hands control back to us, work out what the opponent changed
+   * so the board can highlight it until we interact.
+   */
+  #updateHighlights(myTurn) {
+    if (
+      myTurn &&
+      this.prevState &&
+      this.state.turnNumber > this.prevState.turnNumber
+    ) {
+      const diff = computeBoardDiff(this.prevState.board, this.state.board);
+      this.highlights = isEmptyDiff(diff) ? null : diff;
+    }
+  }
+
+  /** Clears the opponent-move highlights once the player interacts. */
+  #clearHighlights() {
+    if (!this.highlights) return;
+    this.highlights = null;
+    this.#render();
   }
 
   /** Switches between waiting and game screens based on status. */
@@ -123,53 +196,87 @@ export class GameController {
     }
 
     const myTurn = this.#isMyTurn();
-    const board = myTurn ? this.working.board : this.state.board;
-    const hand = myTurn ? this.working.hand : this.state.hands[this.mySeat] ?? [];
 
-    renderBoard(byId('board'), board, { locked: !myTurn });
-    renderRack(byId('rack'), hand, { locked: !myTurn });
-    renderStatusBar(this.state, this.mySeat);
+    renderBoard(byId('board'), this.working.board, {
+      locked: !myTurn,
+      highlights: myTurn ? this.highlights : null,
+    });
+    // The rack is always reorderable, even when it is not our turn.
+    renderRack(byId('rack'), this.working.hand, { locked: false });
+    this.#renderStatus();
 
     const running = this.state.status === GAME_STATUS.IN_PROGRESS;
     byId('end-turn-btn').disabled = !myTurn;
     byId('draw-btn').disabled = !myTurn;
     byId('reset-turn-btn').disabled = !myTurn;
-    byId('sort-color-btn').disabled = !myTurn;
-    byId('sort-number-btn').disabled = !myTurn;
-    byId('controls').style.opacity = running ? '1' : '0.5';
+    byId('sort-color-btn').disabled = !running;
+    byId('sort-number-btn').disabled = !running;
   }
 
-  /** Shows the game-over overlay once, when the game finishes. */
-  #maybeShowGameOver() {
-    if (this.state.status !== GAME_STATUS.FINISHED || this.gameOverShown) return;
-    this.gameOverShown = true;
-
-    const won = this.state.winner === this.mySeat;
-    const draw = this.state.winner == null;
-    byId('gameover-title').textContent = draw
-      ? 'Unentschieden'
-      : won
-        ? 'Du hast gewonnen! 🎉'
-        : 'Du hast verloren';
-    byId('gameover-text').textContent = draw
-      ? 'Beide Spieler haben gleich viele Punkte.'
-      : won
-        ? 'Alle deine Steine sind abgelegt.'
-        : 'Dein Gegner war zuerst fertig.';
-    byId('gameover-overlay').hidden = false;
+  /** Renders just the status bar (used on stats updates too). */
+  #renderStatus() {
+    if (this.state && this.mySeat) {
+      renderStatusBar(this.state, this.mySeat, this.stats);
+    }
   }
+
+  // --------------------------------------------------------------- stats
+
+  /** Keeps live stats subscriptions in sync with the seats' device ids. */
+  #ensureStatsSubscriptions() {
+    if (!this.mySeat) return;
+    const mine = this.state.devices?.[this.mySeat] ?? null;
+    const theirs = this.state.devices?.[otherSeat(this.mySeat)] ?? null;
+
+    if (mine !== this.subscribedDevices.you) {
+      this.statsUnsub.you?.();
+      this.subscribedDevices.you = mine;
+      this.statsUnsub.you = subscribeStats(mine, (s) => {
+        this.stats.you = s;
+        this.#renderStatus();
+      });
+    }
+    if (theirs !== this.subscribedDevices.opp) {
+      this.statsUnsub.opp?.();
+      this.subscribedDevices.opp = theirs;
+      this.statsUnsub.opp = subscribeStats(theirs, (s) => {
+        this.stats.opp = s;
+        this.#renderStatus();
+      });
+    }
+  }
+
+  /** Records this device's win/loss exactly once per finished game. */
+  #recordResultOnce() {
+    if (this.state.status !== GAME_STATUS.FINISHED) return;
+    if (this.resultRecorded || !this.state.winner || !this.mySeat) return;
+
+    const flag = `rummikub.recorded.${this.roomCode}`;
+    try {
+      if (localStorage.getItem(flag)) {
+        this.resultRecorded = true;
+        return;
+      }
+      localStorage.setItem(flag, '1');
+    } catch {
+      // Storage unavailable — fall back to the in-memory guard only.
+    }
+
+    this.resultRecorded = true;
+    recordResult(this.deviceId, this.state.winner === this.mySeat).catch(() => {
+      /* a missed stat update is not worth interrupting the game */
+    });
+  }
+
+  // --------------------------------------------------------------- input
 
   /** Wires up the control-bar buttons. */
   #bindControls() {
     byId('end-turn-btn').addEventListener('click', () => this.#endTurn());
     byId('draw-btn').addEventListener('click', () => this.#draw());
     byId('reset-turn-btn').addEventListener('click', () => this.#resetTurn());
-    byId('sort-color-btn').addEventListener('click', () =>
-      this.#sortHand(sortByColor),
-    );
-    byId('sort-number-btn').addEventListener('click', () =>
-      this.#sortHand(sortByNumber),
-    );
+    byId('sort-color-btn').addEventListener('click', () => this.#sortHand(sortByColor));
+    byId('sort-number-btn').addEventListener('click', () => this.#sortHand(sortByNumber));
     byId('play-again-btn').addEventListener('click', () => {
       byId('gameover-overlay').hidden = true;
       this.stop();
@@ -178,10 +285,16 @@ export class GameController {
   }
 
   /**
-   * Mobile browsers suspend the realtime socket while a tab is backgrounded, so
-   * a move made by the opponent in the meantime can arrive late. When the tab
-   * becomes visible or regains focus again we pull the latest state once, so
-   * the player never has to refresh manually.
+   * Clears highlights as soon as the player touches the board (clicking in or
+   * picking up a tile) — one of the trigger conditions for removing them.
+   */
+  #bindHighlightClearing() {
+    byId('board').addEventListener('pointerdown', () => this.#clearHighlights());
+  }
+
+  /**
+   * On mobile the realtime socket is suspended while the tab is backgrounded;
+   * pull the latest state once when the tab becomes visible again.
    */
   #bindVisibilityRefresh() {
     const refresh = () => {
@@ -206,9 +319,16 @@ export class GameController {
   #setupDragAndDrop() {
     this.dragController = createDragController({
       root: byId('game-screen'),
-      isEnabled: () => this.#isMyTurn() && this.working != null,
+      isEnabled: () =>
+        this.state?.status === GAME_STATUS.IN_PROGRESS && this.mySeat != null,
       onDrop: (tileId, target) => {
+        const myTurn = this.#isMyTurn();
+        // When it is not our turn we may only reorder our own rack.
+        if (!myTurn && target.zone !== 'rack') return;
+        if (target.zone !== 'rack') this.highlights = null; // board interaction
+
         this.working = applyDrop(this.working, tileId, target);
+        this.#syncHandOrder();
         this.#render();
       },
     });
@@ -227,6 +347,7 @@ export class GameController {
       return;
     }
 
+    this.highlights = null;
     toastSuccess('Zug gespeichert.');
     await this.#persist(result.state);
   }
@@ -239,21 +360,26 @@ export class GameController {
       toastError(result.error);
       return;
     }
+    this.highlights = null;
     toast('Stein gezogen.');
     await this.#persist(result.state);
   }
 
-  /** Discards local edits and restores the authoritative board + hand. */
+  /** Discards local board edits and restores the authoritative board + hand. */
   #resetTurn() {
     if (!this.#isMyTurn()) return;
-    this.working = createWorkingTurn(this.state.board, this.state.hands[this.mySeat]);
+    this.working = createWorkingTurn(
+      this.state.board,
+      this.#orderedHand(this.state.hands[this.mySeat]),
+    );
     this.#render();
   }
 
   /** Sorts the working hand using the supplied comparator-producer. */
   #sortHand(sorter) {
-    if (!this.#isMyTurn()) return;
+    if (this.state?.status !== GAME_STATUS.IN_PROGRESS || !this.working) return;
     this.working = withSortedHand(this.working, sorter(this.working.hand));
+    this.#syncHandOrder();
     this.#render();
   }
 
@@ -268,5 +394,25 @@ export class GameController {
     } catch (error) {
       toastError(`Speichern fehlgeschlagen: ${error.message}`);
     }
+  }
+
+  /** Shows the game-over overlay once, when the game finishes. */
+  #maybeShowGameOver() {
+    if (this.state.status !== GAME_STATUS.FINISHED || this.gameOverShown) return;
+    this.gameOverShown = true;
+
+    const won = this.state.winner === this.mySeat;
+    const draw = this.state.winner == null;
+    byId('gameover-title').textContent = draw
+      ? 'Unentschieden'
+      : won
+        ? 'Du hast gewonnen! 🎉'
+        : 'Du hast verloren';
+    byId('gameover-text').textContent = draw
+      ? 'Beide Spieler haben gleich viele Punkte.'
+      : won
+        ? 'Alle deine Steine sind abgelegt.'
+        : 'Dein Gegner war zuerst fertig.';
+    byId('gameover-overlay').hidden = false;
   }
 }

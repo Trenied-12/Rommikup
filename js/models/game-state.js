@@ -20,8 +20,14 @@
  * @property {?string} winner                       One of SEAT, or null.
  * @property {number} turnNumber
  * @property {?string} lastAction                   Short note for the opponent.
+ * @property {{ host: ?LastMove, guest: ?LastMove }} lastMoves  Most recent move per seat.
+ * @property {{ host: ?string, guest: ?string }} devices  Stable device id per seat.
  * @property {number} createdAt                     Epoch millis.
  * @property {number} updatedAt                     Epoch millis.
+ *
+ * @typedef {Object} LastMove
+ * @property {'draw'|'meld'} type       Whether a tile was drawn or tiles were played.
+ * @property {number} tilesPlayed       How many tiles were laid down (0 for a draw).
  */
 
 import { GAME_STATUS, SEAT } from '../game/constants.js';
@@ -31,10 +37,10 @@ import { dealNewGame } from '../game/tile-factory.js';
  * Builds a fresh game state with both hands already dealt. The game waits for a
  * guest before play begins.
  *
- * @param {{ roomCode: string, hostId: string }} params
+ * @param {{ roomCode: string, hostId: string, hostDeviceId?: ?string }} params
  * @returns {GameState}
  */
-export function createInitialGameState({ roomCode, hostId }) {
+export function createInitialGameState({ roomCode, hostId, hostDeviceId = null }) {
   const { hostHand, guestHand, pool } = dealNewGame();
   const now = Date.now();
 
@@ -51,6 +57,8 @@ export function createInitialGameState({ roomCode, hostId }) {
     winner: null,
     turnNumber: 1,
     lastAction: null,
+    lastMoves: { host: null, guest: null },
+    devices: { host: hostDeviceId, guest: null },
     createdAt: now,
     updatedAt: now,
   };

@@ -88,6 +88,30 @@
   background: rgba(242, 163, 65, 0.12);
 }
 
+/* --- "What the opponent just did" highlights (cleared on first interaction) --- */
+
+/* A brand-new meld the opponent created. */
+.meld--new {
+  outline: 3px solid var(--color-success);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+/* A meld the opponent removed tiles from / broke apart. */
+.meld--reduced {
+  outline: 3px solid var(--color-danger);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+/* A single tile the opponent attached to an existing meld. */
+.tile--added {
+  outline: 3px solid #ffe04a;
+  outline-offset: 1px;
+  box-shadow: 0 0 8px rgba(255, 224, 74, 0.6);
+  z-index: 1;
+}
+
 /* Hint shown inside the empty board. */
 .board__placeholder {
   margin: auto;

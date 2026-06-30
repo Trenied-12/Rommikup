@@ -8,8 +8,8 @@
 
 import { createElement } from './dom.js';
 
-/** Unicode joker face. */
-const JOKER_GLYPH = '☺';
+/** Joker glyph — a T-Rex. */
+const JOKER_GLYPH = '🦖';
 
 /**
  * Builds a DOM element for a tile.

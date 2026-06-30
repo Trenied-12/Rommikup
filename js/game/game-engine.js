@@ -61,13 +61,15 @@ function boardJokerIds(board) {
  *
  * @param {import('../models/game-state.js').GameState} state
  * @param {string} guestId
+ * @param {?string} [guestDeviceId] Stable device id of the joining player.
  * @returns {import('../models/game-state.js').GameState}
  */
-export function joinGame(state, guestId) {
+export function joinGame(state, guestId, guestDeviceId = null) {
   return {
     ...state,
     guestId,
     status: GAME_STATUS.IN_PROGRESS,
+    devices: { ...state.devices, guest: guestDeviceId },
     updatedAt: Date.now(),
   };
 }
@@ -111,6 +113,7 @@ export function drawTile(state, seat) {
       currentTurn: otherSeat(seat),
       turnNumber: state.turnNumber + 1,
       lastAction: 'Gegner hat einen Stein gezogen.',
+      lastMoves: { ...state.lastMoves, [seat]: { type: 'draw', tilesPlayed: 0 } },
       updatedAt: Date.now(),
     },
   };
@@ -222,6 +225,7 @@ export function commitTurn(state, seat, proposed) {
   // All checks passed — build the committed state.
   const hands = { ...state.hands, [seat]: proposedHand };
   const playerIsOut = proposedHand.length === 0;
+  const tilesPlayed = startHand.length - proposedHand.length;
 
   return {
     ok: true,
@@ -241,62 +245,81 @@ export function commitTurn(state, seat, proposed) {
       lastAction: playerIsOut
         ? 'Gegner hat alle Steine abgelegt.'
         : 'Gegner hat Steine ausgelegt.',
+      lastMoves: { ...state.lastMoves, [seat]: { type: 'meld', tilesPlayed } },
       updatedAt: Date.now(),
     },
   };
 }
 
 /**
- * Enforces the first-meld rules: existing melds must be untouched, and the
- * tiles newly added this turn must form their own melds worth >= 30 points.
+ * Enforces the first-meld rules (house variant):
+ *
+ *  - The 30+ points required to "open" must come from **brand-new melds built
+ *    only from the player's own tiles** — not by attaching to, or rearranging,
+ *    anything already on the board.
+ *  - Once that threshold is met the player may *additionally* extend existing
+ *    melds with their own tiles in the same turn. Those extensions do not count
+ *    toward the 30 points.
+ *  - Existing melds may grow but must not be split, merged or have tiles
+ *    removed.
  *
  * @param {import('../game/validation.js').Meld[]} startBoard
  * @param {import('../game/validation.js').Meld[]} proposedBoard
  * @returns {{ ok: boolean, error: ?string }}
  */
 export function validateInitialMeld(startBoard, proposedBoard) {
-  const oldTileIds = tileIdsOfBoard(startBoard);
+  // Map every pre-existing tile to the meld it belonged to.
+  const oldMeldOfTile = new Map();
+  for (const meld of startBoard) {
+    for (const tile of meld.tiles) oldMeldOfTile.set(tile.id, meld.id);
+  }
 
-  // Each resulting meld must be entirely old (untouched) or entirely new.
-  // Mixing means the player extended/altered an existing meld, which is
-  // forbidden before the first meld is made.
+  const rearrangeError =
+    'Beim ersten Auslegen dürfen vorhandene Kombinationen nur erweitert, ' +
+    'nicht umsortiert oder zusammengelegt werden.';
+
   let newPoints = 0;
-  let placedAnyNew = false;
+  let placedPureNewMeld = false;
 
   for (const meld of proposedBoard) {
-    const newTiles = meld.tiles.filter((tile) => !oldTileIds.has(tile.id));
-    const oldTiles = meld.tiles.filter((tile) => oldTileIds.has(tile.id));
-
-    if (newTiles.length > 0 && oldTiles.length > 0) {
-      return {
-        ok: false,
-        error:
-          'Beim ersten Auslegen dürfen vorhandene Kombinationen nicht ' +
-          'verändert werden.',
-      };
+    const touchedOldMelds = new Set();
+    for (const tile of meld.tiles) {
+      if (oldMeldOfTile.has(tile.id)) {
+        touchedOldMelds.add(oldMeldOfTile.get(tile.id));
+      }
     }
 
-    if (newTiles.length > 0) {
-      placedAnyNew = true;
-      // analyzeBoard already validated each meld; recompute its points here.
+    // A single resulting meld may contain tiles from at most one existing meld
+    // (otherwise two existing melds were merged).
+    if (touchedOldMelds.size > 1) {
+      return { ok: false, error: rearrangeError };
+    }
+
+    // A meld made purely of freshly-played tiles is what counts toward 30.
+    if (touchedOldMelds.size === 0) {
+      placedPureNewMeld = true;
       newPoints += meldPoints(meld);
     }
   }
 
-  // Existing melds must all still be present and unchanged in shape.
-  if (!existingMeldsUnchanged(startBoard, proposedBoard)) {
+  // Every existing meld must survive intact (all its tiles together) inside one
+  // resulting meld — it may have gained tiles, but never lost or split any.
+  for (const meld of startBoard) {
+    const survives = proposedBoard.some((candidate) => {
+      const ids = new Set(candidate.tiles.map((tile) => tile.id));
+      return meld.tiles.every((tile) => ids.has(tile.id));
+    });
+    if (!survives) {
+      return { ok: false, error: rearrangeError };
+    }
+  }
+
+  if (!placedPureNewMeld || newPoints < INITIAL_MELD_MIN_POINTS) {
     return {
       ok: false,
       error:
-        'Beim ersten Auslegen dürfen vorhandene Kombinationen nicht ' +
-        'verändert werden.',
-    };
-  }
-
-  if (!placedAnyNew || newPoints < INITIAL_MELD_MIN_POINTS) {
-    return {
-      ok: false,
-      error: `Zum ersten Auslegen brauchst du mindestens ${INITIAL_MELD_MIN_POINTS} Punkte aus eigenen Steinen.`,
+        `Zum ersten Auslegen brauchst du mindestens ${INITIAL_MELD_MIN_POINTS} ` +
+        'Punkte aus komplett neuen, eigenen Kombinationen (ohne Anlegen).',
     };
   }
 
@@ -305,36 +328,5 @@ export function validateInitialMeld(startBoard, proposedBoard) {
 
 /** Recomputes a single meld's point value via the validator. */
 function meldPoints(meld) {
-  // Local import avoided to keep the module graph simple; analyzeBoard reuse.
   return analyzeBoard([meld]).points;
-}
-
-/**
- * Confirms that every meld present at the start of the turn still exists with
- * exactly the same set of tile ids (order may differ but contents may not).
- *
- * @param {import('../game/validation.js').Meld[]} startBoard
- * @param {import('../game/validation.js').Meld[]} proposedBoard
- * @returns {boolean}
- */
-function existingMeldsUnchanged(startBoard, proposedBoard) {
-  const proposedSignatures = proposedBoard.map((meld) =>
-    meld.tiles
-      .map((tile) => tile.id)
-      .sort()
-      .join('|'),
-  );
-
-  for (const meld of startBoard) {
-    const signature = meld.tiles
-      .map((tile) => tile.id)
-      .sort()
-      .join('|');
-    const matchIndex = proposedSignatures.indexOf(signature);
-    if (matchIndex === -1) return false;
-    // Consume the match so two identical melds both need a counterpart.
-    proposedSignatures.splice(matchIndex, 1);
-  }
-
-  return true;
 }

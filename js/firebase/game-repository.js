@@ -50,9 +50,10 @@ function toDocument(state) {
  * Creates a brand-new game with a unique room code.
  *
  * @param {string} hostId Auth uid of the creating player.
+ * @param {?string} [hostDeviceId] Stable device id of the host.
  * @returns {Promise<{ roomCode: string }>}
  */
-export async function createGame(hostId) {
+export async function createGame(hostId, hostDeviceId = null) {
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
     const roomCode = generateRoomCode();
     const ref = gameRef(roomCode);
@@ -62,7 +63,7 @@ export async function createGame(hostId) {
       const existing = await transaction.get(ref);
       if (existing.exists()) return false;
 
-      const state = createInitialGameState({ roomCode, hostId });
+      const state = createInitialGameState({ roomCode, hostId, hostDeviceId });
       transaction.set(ref, toDocument(state));
       return true;
     });
@@ -79,9 +80,10 @@ export async function createGame(hostId) {
  *
  * @param {string} roomCode
  * @param {string} guestId Auth uid of the joining player.
+ * @param {?string} [guestDeviceId] Stable device id of the joining player.
  * @returns {Promise<{ roomCode: string }>}
  */
-export async function joinGameByCode(roomCode, guestId) {
+export async function joinGameByCode(roomCode, guestId, guestDeviceId = null) {
   const ref = gameRef(roomCode);
 
   await runTransaction(db, async (transaction) => {
@@ -103,7 +105,7 @@ export async function joinGameByCode(roomCode, guestId) {
       throw new Error('Dieses Spiel kann nicht mehr betreten werden.');
     }
 
-    transaction.set(ref, toDocument(joinGame(state, guestId)));
+    transaction.set(ref, toDocument(joinGame(state, guestId, guestDeviceId)));
   });
 
   return { roomCode };

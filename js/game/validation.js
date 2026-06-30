@@ -22,7 +22,6 @@ import {
   MELD_TYPE,
   MIN_MELD_SIZE,
   MAX_GROUP_SIZE,
-  MIN_NUMBER,
   MAX_NUMBER,
 } from './constants.js';
 
@@ -32,8 +31,24 @@ function invalid(reason) {
 }
 
 /**
- * Attempts to read the tiles as a run: 3+ consecutive numbers, one colour,
- * with jokers filling gaps.
+ * The number that appears at a given offset of a run starting at `startValue`,
+ * wrapping around so that 13 is followed by 1 (house rule). Always returns a
+ * value in the range [MIN_NUMBER, MAX_NUMBER].
+ *
+ * @param {number} startValue Number at offset 0 (1..13).
+ * @param {number} offset Position within the run.
+ * @returns {number}
+ */
+function runNumberAt(startValue, offset) {
+  const span = MAX_NUMBER; // 13 distinct numbers on the cycle
+  return (((startValue - 1 + offset) % span) + span) % span + 1;
+}
+
+/**
+ * Attempts to read the tiles as a run: 3+ consecutive numbers of one colour,
+ * with jokers filling gaps. Runs wrap around: after 13 comes 1 again (so
+ * 12-13-1 or 8-9-10-11-12-13-1 are valid). A run can hold at most 13 tiles,
+ * since a 14th would repeat a number.
  *
  * @param {import('../models/tile.js').Tile[]} tiles Ordered tiles.
  * @returns {MeldAnalysis}
@@ -41,6 +56,9 @@ function invalid(reason) {
 export function analyzeAsRun(tiles) {
   if (tiles.length < MIN_MELD_SIZE) {
     return invalid(`Eine Reihe braucht mindestens ${MIN_MELD_SIZE} Steine.`);
+  }
+  if (tiles.length > MAX_NUMBER) {
+    return invalid(`Eine Reihe darf höchstens ${MAX_NUMBER} Steine haben.`);
   }
 
   const numbered = tiles
@@ -57,25 +75,20 @@ export function analyzeAsRun(tiles) {
     return invalid('Eine Reihe darf nur eine Farbe enthalten.');
   }
 
-  // Derive the value the first slot must hold; every real tile must agree.
-  const startValue = numbered[0].tile.number - numbered[0].index;
+  // Derive the value the first slot must hold (mod 13), then check every real
+  // tile sits exactly where this cyclic sequence expects it.
+  const first = numbered[0];
+  const startValue = runNumberAt(first.tile.number, -first.index);
   for (const { tile, index } of numbered) {
-    if (tile.number - index !== startValue) {
+    if (tile.number !== runNumberAt(startValue, index)) {
       return invalid('Die Zahlen einer Reihe müssen lückenlos aufsteigen.');
     }
   }
 
-  const endValue = startValue + tiles.length - 1;
-  if (startValue < MIN_NUMBER || endValue > MAX_NUMBER) {
-    return invalid(
-      `Eine Reihe muss innerhalb von ${MIN_NUMBER}–${MAX_NUMBER} liegen.`,
-    );
-  }
-
-  // Sum of an arithmetic sequence; jokers contribute their derived value.
+  // Jokers contribute the value of the slot they fill.
   let points = 0;
   for (let i = 0; i < tiles.length; i += 1) {
-    points += startValue + i;
+    points += runNumberAt(startValue, i);
   }
 
   return { valid: true, type: MELD_TYPE.RUN, points, reason: null };
