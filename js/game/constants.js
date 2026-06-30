@@ -80,3 +80,10 @@ export const SEAT = Object.freeze({
 
 /** Length of the human-friendly room code shown to players. */
 export const ROOM_CODE_LENGTH = 5;
+
+/**
+ * Time limit for a single player's turn, in milliseconds (2 minutes). When it
+ * runs out the active player's board edits are discarded and a tile is drawn
+ * automatically.
+ */
+export const TURN_DURATION_MS = 2 * 60 * 1000;

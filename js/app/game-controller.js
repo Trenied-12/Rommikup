@@ -26,7 +26,28 @@ import { commitTurn, drawTile } from '../game/game-engine.js';
 import { computeBoardDiff, isEmptyDiff } from '../game/board-diff.js';
 import { subscribeToGame, saveGame, fetchGame } from '../firebase/game-repository.js';
 import { recordResult, subscribeStats } from '../firebase/stats-repository.js';
-import { GAME_STATUS } from '../game/constants.js';
+import { GAME_STATUS, TURN_DURATION_MS } from '../game/constants.js';
+
+/** How often the countdown display refreshes, in milliseconds. */
+const TIMER_TICK_MS = 250;
+
+/** Below this many milliseconds the timer turns red and pulses. */
+const TIMER_URGENT_MS = 30 * 1000;
+
+/**
+ * Extra grace after the deadline before the *waiting* player enforces the
+ * timeout on behalf of an opponent who has disconnected, so the game can never
+ * stall on a closed tab. The active player themselves enforces immediately.
+ */
+const TIMER_ENFORCE_GRACE_MS = 5 * 1000;
+
+/** Formats a millisecond duration as "m:ss". */
+function formatClock(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
 
 export class GameController {
   /**
@@ -62,10 +83,15 @@ export class GameController {
     this.gameOverShown = false;
     this.resultRecorded = false;
 
+    /** The turn for which we already auto-ended on timeout (avoids re-firing). */
+    this.timedOutTurn = null;
+    this.timerInterval = null;
+
     this.#bindControls();
     this.#setupDragAndDrop();
     this.#bindVisibilityRefresh();
     this.#bindHighlightClearing();
+    this.#startTimer();
   }
 
   /**
@@ -99,6 +125,7 @@ export class GameController {
     this.stats = { you: null, opp: null };
     this.gameOverShown = false;
     this.resultRecorded = false;
+    this.timedOutTurn = null;
   }
 
   // ----------------------------------------------------------------- private
@@ -313,6 +340,71 @@ export class GameController {
     } catch {
       // A failed one-off refresh is harmless; the live listener stays active.
     }
+  }
+
+  // --------------------------------------------------------------- turn timer
+
+  /** Starts the recurring countdown tick (runs for the controller's lifetime). */
+  #startTimer() {
+    this.timerInterval = setInterval(() => this.#tickTimer(), TIMER_TICK_MS);
+  }
+
+  /**
+   * Updates the countdown display from the authoritative turn-start time (so
+   * both players see the same clock) and, for the active player, automatically
+   * ends the turn when time runs out.
+   */
+  #tickTimer() {
+    const timerEl = byId('status-timer');
+    const running =
+      this.state?.status === GAME_STATUS.IN_PROGRESS &&
+      this.state.turnStartedAt != null;
+
+    if (!running) {
+      timerEl.textContent = '';
+      timerEl.classList.remove('status-bar__timer--urgent');
+      return;
+    }
+
+    const raw = TURN_DURATION_MS - (Date.now() - this.state.turnStartedAt);
+    const remaining = Math.max(0, raw);
+    timerEl.textContent = formatClock(remaining);
+    timerEl.classList.toggle('status-bar__timer--urgent', remaining <= TIMER_URGENT_MS);
+
+    // Enforce the deadline once per turn. The active player acts immediately;
+    // the waiting player only steps in after a grace period (disconnect safety).
+    if (this.timedOutTurn === this.state.turnNumber) return;
+    const enforce = this.#isMyTurn()
+      ? raw <= 0
+      : raw <= -TIMER_ENFORCE_GRACE_MS;
+    if (enforce) {
+      this.timedOutTurn = this.state.turnNumber;
+      this.#handleTimeout();
+    }
+  }
+
+  /**
+   * On timeout: discard the active player's board edits and draw a tile (which
+   * ends their turn). Works whether we are the timed-out player or are enforcing
+   * the deadline for a disconnected opponent.
+   */
+  async #handleTimeout() {
+    const activeSeat = this.state.currentTurn;
+    const mine = activeSeat === this.mySeat;
+
+    if (mine) {
+      // Reset our own in-progress board changes back to the authoritative board.
+      this.working = createWorkingTurn(
+        this.state.board,
+        this.#orderedHand(this.state.hands[this.mySeat]),
+      );
+      this.highlights = null;
+    }
+
+    const result = drawTile(this.state, activeSeat);
+    if (!result.ok) return; // turn already changed / game ended in the meantime
+    if (mine) toast('Zeit abgelaufen – Zug wurde automatisch beendet.');
+    await this.#persist(result.state);
   }
 
   /** Creates the drag controller bound to the game screen. */

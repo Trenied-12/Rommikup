@@ -61,6 +61,7 @@
       <!-- Main game screen -->
       <section id="game-screen" class="screen game" hidden>
         <header class="status-bar" id="status-bar">
+          <div class="status-bar__main">
           <div class="status-bar__item">
             <span class="status-bar__label">Am Zug</span>
             <span class="status-bar__value" id="status-turn">—</span>
@@ -74,7 +75,7 @@
             <span class="status-bar__value" id="status-opponent">—</span>
           </div>
           <div class="status-bar__item">
-            <span class="status-bar__label">Statistik (ich)</span>
+            <span class="status-bar__label">Statistik (Du)</span>
             <span class="status-bar__value status-bar__value--you" id="status-score-you">–</span>
           </div>
           <div class="status-bar__item">
@@ -84,6 +85,10 @@
           <div class="status-bar__item status-bar__item--wide">
             <span class="status-bar__label">Letzter Zug des Gegners</span>
             <span class="status-bar__value" id="status-state">—</span>
+          </div>
+          </div>
+          <div class="status-bar__timer" id="status-timer" aria-label="Verbleibende Zugzeit">
+            2:00
           </div>
         </header>
 

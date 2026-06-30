@@ -70,6 +70,7 @@ export function joinGame(state, guestId, guestDeviceId = null) {
     guestId,
     status: GAME_STATUS.IN_PROGRESS,
     devices: { ...state.devices, guest: guestDeviceId },
+    turnStartedAt: Date.now(), // the host's first turn clock starts now
     updatedAt: Date.now(),
   };
 }
@@ -107,6 +108,7 @@ export function drawTile(state, seat) {
         ...state,
         currentTurn: otherSeat(seat),
         turnNumber: state.turnNumber + 1,
+        turnStartedAt: Date.now(),
         consecutivePasses: passes,
         lastAction: 'Gegner musste aussetzen (Stapel leer).',
         lastMoves: { ...state.lastMoves, [seat]: { type: 'pass', tilesPlayed: 0 } },
@@ -130,6 +132,7 @@ export function drawTile(state, seat) {
       hands,
       currentTurn: otherSeat(seat),
       turnNumber: state.turnNumber + 1,
+      turnStartedAt: Date.now(),
       consecutivePasses: 0,
       lastAction: 'Gegner hat einen Stein gezogen.',
       lastMoves: { ...state.lastMoves, [seat]: { type: 'draw', tilesPlayed: 0 } },
@@ -262,6 +265,7 @@ export function commitTurn(state, seat, proposed) {
       winner: playerIsOut ? seat : state.winner,
       consecutivePasses: 0,
       turnNumber: state.turnNumber + 1,
+      turnStartedAt: Date.now(),
       lastAction: playerIsOut
         ? 'Gegner hat alle Steine abgelegt.'
         : 'Gegner hat Steine ausgelegt.',

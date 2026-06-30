@@ -7,11 +7,21 @@
 /* ============================ Status bar ============================ */
 .status-bar {
   display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   background: var(--color-bg-soft);
   border-bottom: 1px solid var(--color-border);
+}
+
+/* The info items wrap among themselves; the timer stays a fixed right column. */
+.status-bar__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
   flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
 .status-bar__item {
@@ -39,6 +49,36 @@
 
 .status-bar__value--you {
   color: var(--color-accent);
+}
+
+/* Per-turn countdown, pinned to the top-right of the info bar. */
+.status-bar__timer {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-width: 76px;
+  text-align: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+/* Last 30 seconds: turn red and pulse to warn the player. */
+.status-bar__timer--urgent {
+  color: #fff;
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  animation: timer-pulse 1s ease-in-out infinite;
+}
+
+@keyframes timer-pulse {
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ============================ Board area ============================ */

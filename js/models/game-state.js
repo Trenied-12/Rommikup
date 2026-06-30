@@ -19,6 +19,7 @@
  * @property {{ host: boolean, guest: boolean }} hasMadeInitialMeld
  * @property {?string} winner                       One of SEAT, or null.
  * @property {number} turnNumber
+ * @property {number} turnStartedAt                 Epoch millis the current turn began.
  * @property {number} consecutivePasses             Passes in a row on an empty pool.
  * @property {?string} lastAction                   Short note for the opponent.
  * @property {{ host: ?LastMove, guest: ?LastMove }} lastMoves  Most recent move per seat.
@@ -57,6 +58,7 @@ export function createInitialGameState({ roomCode, hostId, hostDeviceId = null }
     hasMadeInitialMeld: { host: false, guest: false },
     winner: null,
     turnNumber: 1,
+    turnStartedAt: now,
     consecutivePasses: 0,
     lastAction: null,
     lastMoves: { host: null, guest: null },
