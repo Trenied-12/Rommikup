@@ -22,10 +22,10 @@ function describeMove(move) {
   return `${n} ${n === 1 ? 'Stein' : 'Steine'} gespielt`;
 }
 
-/** Formats a stats record as "3 S / 2 N" (Siege / Niederlagen). */
+/** Formats a stats record as "wins - losses", e.g. "2 - 1". */
 function formatScore(stats) {
   if (!stats) return '–';
-  return `${stats.wins} S / ${stats.losses} N`;
+  return `${stats.wins} - ${stats.losses}`;
 }
 
 /**
