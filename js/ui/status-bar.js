@@ -18,6 +18,7 @@ import { otherSeat } from '../models/game-state.js';
 function describeMove(move) {
   if (!move) return 'Noch kein Zug';
   if (move.type === 'draw') return 'Stein gezogen';
+  if (move.type === 'pass') return 'Ausgesetzt (Stapel leer)';
   const n = move.tilesPlayed;
   return `${n} ${n === 1 ? 'Stein' : 'Steine'} gespielt`;
 }

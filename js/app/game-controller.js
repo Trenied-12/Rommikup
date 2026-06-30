@@ -355,13 +355,14 @@ export class GameController {
   /** Draws a tile and ends the turn. Discards any pending board edits. */
   async #draw() {
     if (!this.#isMyTurn()) return;
+    const poolEmpty = this.state.pool.length === 0;
     const result = drawTile(this.state, this.mySeat);
     if (!result.ok) {
       toastError(result.error);
       return;
     }
     this.highlights = null;
-    toast('Stein gezogen.');
+    toast(poolEmpty ? 'Nachziehstapel leer – du setzt aus.' : 'Stein gezogen.');
     await this.#persist(result.state);
   }
 

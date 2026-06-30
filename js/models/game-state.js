@@ -19,6 +19,7 @@
  * @property {{ host: boolean, guest: boolean }} hasMadeInitialMeld
  * @property {?string} winner                       One of SEAT, or null.
  * @property {number} turnNumber
+ * @property {number} consecutivePasses             Passes in a row on an empty pool.
  * @property {?string} lastAction                   Short note for the opponent.
  * @property {{ host: ?LastMove, guest: ?LastMove }} lastMoves  Most recent move per seat.
  * @property {{ host: ?string, guest: ?string }} devices  Stable device id per seat.
@@ -26,8 +27,8 @@
  * @property {number} updatedAt                     Epoch millis.
  *
  * @typedef {Object} LastMove
- * @property {'draw'|'meld'} type       Whether a tile was drawn or tiles were played.
- * @property {number} tilesPlayed       How many tiles were laid down (0 for a draw).
+ * @property {'draw'|'meld'|'pass'} type  Drew a tile, played tiles, or passed (empty pool).
+ * @property {number} tilesPlayed         How many tiles were laid down (0 for a draw/pass).
  */
 
 import { GAME_STATUS, SEAT } from '../game/constants.js';
@@ -56,6 +57,7 @@ export function createInitialGameState({ roomCode, hostId, hostDeviceId = null }
     hasMadeInitialMeld: { host: false, guest: false },
     winner: null,
     turnNumber: 1,
+    consecutivePasses: 0,
     lastAction: null,
     lastMoves: { host: null, guest: null },
     devices: { host: hostDeviceId, guest: null },

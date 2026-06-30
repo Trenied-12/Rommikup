@@ -92,9 +92,27 @@ export function drawTile(state, seat) {
 
   const pool = [...state.pool];
 
-  // Pool empty: drawing is impossible, so this triggers the endgame.
+  // Pool empty: there is nothing to draw, so the player simply passes. Drawing
+  // never wins the game. Only when BOTH players pass in a row (neither can or
+  // wants to play and the pool is gone) does the game end by point-scoring.
   if (pool.length === 0) {
-    return endGameByExhaustion(state);
+    const passes = (state.consecutivePasses ?? 0) + 1;
+    if (passes >= 2) {
+      return endGameByExhaustion(state);
+    }
+    return {
+      ok: true,
+      error: null,
+      state: {
+        ...state,
+        currentTurn: otherSeat(seat),
+        turnNumber: state.turnNumber + 1,
+        consecutivePasses: passes,
+        lastAction: 'Gegner musste aussetzen (Stapel leer).',
+        lastMoves: { ...state.lastMoves, [seat]: { type: 'pass', tilesPlayed: 0 } },
+        updatedAt: Date.now(),
+      },
+    };
   }
 
   const drawn = pool.pop();
@@ -112,6 +130,7 @@ export function drawTile(state, seat) {
       hands,
       currentTurn: otherSeat(seat),
       turnNumber: state.turnNumber + 1,
+      consecutivePasses: 0,
       lastAction: 'Gegner hat einen Stein gezogen.',
       lastMoves: { ...state.lastMoves, [seat]: { type: 'draw', tilesPlayed: 0 } },
       updatedAt: Date.now(),
@@ -241,6 +260,7 @@ export function commitTurn(state, seat, proposed) {
       currentTurn: playerIsOut ? state.currentTurn : otherSeat(seat),
       status: playerIsOut ? GAME_STATUS.FINISHED : state.status,
       winner: playerIsOut ? seat : state.winner,
+      consecutivePasses: 0,
       turnNumber: state.turnNumber + 1,
       lastAction: playerIsOut
         ? 'Gegner hat alle Steine abgelegt.'
@@ -252,74 +272,39 @@ export function commitTurn(state, seat, proposed) {
 }
 
 /**
- * Enforces the first-meld rules (house variant):
+ * Enforces the first-meld rule (house variant):
  *
- *  - The 30+ points required to "open" must come from **brand-new melds built
- *    only from the player's own tiles** — not by attaching to, or rearranging,
- *    anything already on the board.
- *  - Once that threshold is met the player may *additionally* extend existing
- *    melds with their own tiles in the same turn. Those extensions do not count
- *    toward the 30 points.
- *  - Existing melds may grow but must not be split, merged or have tiles
- *    removed.
+ * The only requirement is that, at the end of the turn, the player's own
+ * brand-new melds — combinations made entirely of tiles they just played, with
+ * nothing from the board mixed in — are worth at least 30 points and stand on
+ * their own. Because the whole board is validated separately, the player is
+ * otherwise free to rearrange, split, merge or extend everything else (their
+ * own extra tiles and the opponent's existing melds included).
+ *
+ * Checking the *final* board guarantees those 30-point melds were actually laid
+ * down and remain in place as standalone melds.
  *
  * @param {import('../game/validation.js').Meld[]} startBoard
  * @param {import('../game/validation.js').Meld[]} proposedBoard
  * @returns {{ ok: boolean, error: ?string }}
  */
 export function validateInitialMeld(startBoard, proposedBoard) {
-  // Map every pre-existing tile to the meld it belonged to.
-  const oldMeldOfTile = new Map();
-  for (const meld of startBoard) {
-    for (const tile of meld.tiles) oldMeldOfTile.set(tile.id, meld.id);
-  }
+  const oldTileIds = tileIdsOfBoard(startBoard);
 
-  const rearrangeError =
-    'Beim ersten Auslegen dürfen vorhandene Kombinationen nur erweitert, ' +
-    'nicht umsortiert oder zusammengelegt werden.';
-
+  // Sum the points of every meld built purely from freshly-played tiles.
   let newPoints = 0;
-  let placedPureNewMeld = false;
-
   for (const meld of proposedBoard) {
-    const touchedOldMelds = new Set();
-    for (const tile of meld.tiles) {
-      if (oldMeldOfTile.has(tile.id)) {
-        touchedOldMelds.add(oldMeldOfTile.get(tile.id));
-      }
-    }
-
-    // A single resulting meld may contain tiles from at most one existing meld
-    // (otherwise two existing melds were merged).
-    if (touchedOldMelds.size > 1) {
-      return { ok: false, error: rearrangeError };
-    }
-
-    // A meld made purely of freshly-played tiles is what counts toward 30.
-    if (touchedOldMelds.size === 0) {
-      placedPureNewMeld = true;
-      newPoints += meldPoints(meld);
-    }
+    const isPureNew = meld.tiles.every((tile) => !oldTileIds.has(tile.id));
+    if (isPureNew) newPoints += meldPoints(meld);
   }
 
-  // Every existing meld must survive intact (all its tiles together) inside one
-  // resulting meld — it may have gained tiles, but never lost or split any.
-  for (const meld of startBoard) {
-    const survives = proposedBoard.some((candidate) => {
-      const ids = new Set(candidate.tiles.map((tile) => tile.id));
-      return meld.tiles.every((tile) => ids.has(tile.id));
-    });
-    if (!survives) {
-      return { ok: false, error: rearrangeError };
-    }
-  }
-
-  if (!placedPureNewMeld || newPoints < INITIAL_MELD_MIN_POINTS) {
+  if (newPoints < INITIAL_MELD_MIN_POINTS) {
     return {
       ok: false,
       error:
         `Zum ersten Auslegen brauchst du mindestens ${INITIAL_MELD_MIN_POINTS} ` +
-        'Punkte aus komplett neuen, eigenen Kombinationen (ohne Anlegen).',
+        'Punkte aus eigenen, eigenständigen Kombinationen (ohne Anlegen an ' +
+        'Vorhandenes).',
     };
   }
 
