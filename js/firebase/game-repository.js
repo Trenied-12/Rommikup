@@ -13,6 +13,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -133,6 +134,20 @@ export async function fetchGame(roomCode) {
  */
 export async function saveGame(roomCode, state) {
   await setDoc(gameRef(roomCode), toDocument(state));
+}
+
+/**
+ * Writes only the given fields of a game document, leaving everything else
+ * untouched. Used for high-frequency or concurrent-safe updates (the live
+ * board preview, pause transitions) that must never clobber a full turn
+ * committed at the same moment.
+ *
+ * @param {string} roomCode
+ * @param {Object} fields Partial GameState fields.
+ * @returns {Promise<void>}
+ */
+export async function updateGameFields(roomCode, fields) {
+  await updateDoc(gameRef(roomCode), { ...fields, updatedAt: serverTimestamp() });
 }
 
 /**

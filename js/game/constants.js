@@ -87,3 +87,16 @@ export const ROOM_CODE_LENGTH = 5;
  * automatically.
  */
 export const TURN_DURATION_MS = 2 * 60 * 1000;
+
+/**
+ * Lifecycle of the shared pause feature. A pause must be requested by one
+ * player and accepted by the other; resuming requires both players' consent.
+ */
+export const PAUSE_STATE = Object.freeze({
+  /** No pause and no open request. */
+  IDLE: 'idle',
+  /** One player asked for a pause; the opponent has not answered yet. */
+  REQUESTED: 'requested',
+  /** Both agreed — the clock is frozen and all interaction is blocked. */
+  ACTIVE: 'active',
+});

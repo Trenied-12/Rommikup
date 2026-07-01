@@ -1,31 +1,24 @@
 /**
  * @file board-view.js
- * @description Renders the shared board (a list of melds) into the DOM. It
- * highlights melds that are currently invalid (live feedback while editing) and
- * can additionally overlay a "what the opponent just did" diff: green for new
- * melds, red for melds that lost tiles, yellow for individual added tiles.
+ * @description Renders the shared board (a list of melds) into the DOM and
+ * highlights any meld that is currently invalid, giving live feedback while a
+ * player rearranges tiles. Thanks to the realtime board preview the opponent
+ * watches those rearrangements as they happen, so no after-the-fact diff
+ * highlighting is needed.
  */
 
 import { createElement, clearElement } from './dom.js';
 import { renderTile } from './tile-view.js';
 import { analyzeMeld } from '../game/validation.js';
 
-/** An empty diff, so callers can omit highlighting. */
-const NO_HIGHLIGHTS = {
-  newMeldIds: new Set(),
-  reducedMeldIds: new Set(),
-  addedTileIds: new Set(),
-};
-
 /**
  * Renders the board.
  *
  * @param {HTMLElement} container The board element.
  * @param {import('../game/validation.js').Meld[]} board
- * @param {{ locked: boolean, highlights?: import('../game/board-diff.js').BoardDiff }} options
+ * @param {{ locked: boolean }} options When locked, tiles are not interactive.
  */
-export function renderBoard(container, board, { locked, highlights }) {
-  const diff = highlights ?? NO_HIGHLIGHTS;
+export function renderBoard(container, board, { locked }) {
   clearElement(container);
   container.classList.toggle('board--locked', locked);
 
@@ -43,21 +36,14 @@ export function renderBoard(container, board, { locked, highlights }) {
 
   for (const meld of board) {
     const analysis = analyzeMeld(meld.tiles);
-    const classes = ['meld'];
-    if (!analysis.valid) classes.push('meld--invalid');
-    if (diff.newMeldIds.has(meld.id)) classes.push('meld--new');
-    if (diff.reducedMeldIds.has(meld.id)) classes.push('meld--reduced');
-
     const meldEl = createElement('div', {
-      class: classes.join(' '),
+      class: `meld${analysis.valid ? '' : ' meld--invalid'}`,
       dataset: { dropzone: 'meld', meldId: meld.id },
       attrs: { title: analysis.valid ? null : analysis.reason },
     });
 
     for (const tile of meld.tiles) {
-      const tileEl = renderTile(tile);
-      if (diff.addedTileIds.has(tile.id)) tileEl.classList.add('tile--added');
-      meldEl.append(tileEl);
+      meldEl.append(renderTile(tile));
     }
     container.append(meldEl);
   }

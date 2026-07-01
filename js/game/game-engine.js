@@ -14,9 +14,10 @@ import {
   GAME_STATUS,
   SEAT,
   INITIAL_MELD_MIN_POINTS,
+  PAUSE_STATE,
 } from './constants.js';
 import { analyzeBoard } from './validation.js';
-import { otherSeat, handOf } from '../models/game-state.js';
+import { otherSeat, handOf, createIdlePause } from '../models/game-state.js';
 import { scoreEndgame } from './scoring.js';
 
 /**
@@ -112,6 +113,7 @@ export function drawTile(state, seat) {
         consecutivePasses: passes,
         lastAction: 'Gegner musste aussetzen (Stapel leer).',
         lastMoves: { ...state.lastMoves, [seat]: { type: 'pass', tilesPlayed: 0 } },
+        livePreview: null,
         updatedAt: Date.now(),
       },
     };
@@ -136,6 +138,7 @@ export function drawTile(state, seat) {
       consecutivePasses: 0,
       lastAction: 'Gegner hat einen Stein gezogen.',
       lastMoves: { ...state.lastMoves, [seat]: { type: 'draw', tilesPlayed: 0 } },
+      livePreview: null,
       updatedAt: Date.now(),
     },
   };
@@ -157,6 +160,7 @@ export function endGameByExhaustion(state) {
       status: GAME_STATUS.FINISHED,
       winner,
       lastAction: 'Nachziehstapel leer – Spielende durch Wertung.',
+      livePreview: null,
       updatedAt: Date.now(),
     },
   };
@@ -270,6 +274,7 @@ export function commitTurn(state, seat, proposed) {
         ? 'Gegner hat alle Steine abgelegt.'
         : 'Gegner hat Steine ausgelegt.',
       lastMoves: { ...state.lastMoves, [seat]: { type: 'meld', tilesPlayed } },
+      livePreview: null,
       updatedAt: Date.now(),
     },
   };
@@ -318,4 +323,115 @@ export function validateInitialMeld(startBoard, proposedBoard) {
 /** Recomputes a single meld's point value via the validator. */
 function meldPoints(meld) {
   return analyzeBoard([meld]).points;
+}
+
+// --------------------------------------------------------------------- pause
+
+/**
+ * Pause transitions return *partial field updates* instead of a whole state:
+ * the caller persists exactly these fields (Firestore `updateDoc`), so a pause
+ * action can never overwrite a turn that is being committed at the same moment.
+ *
+ * @typedef {Object} PauseResult
+ * @property {boolean} ok
+ * @property {?string} error   Human-readable reason when ok === false.
+ * @property {?Object} fields  Partial GameState fields to persist when ok.
+ */
+
+/** Reads the pause record, tolerating documents from before the feature. */
+export function pauseOf(state) {
+  return state.pause ?? createIdlePause();
+}
+
+/**
+ * One player asks to pause the game.
+ *
+ * @param {import('../models/game-state.js').GameState} state
+ * @param {string} seat Requesting seat (one of SEAT).
+ * @returns {PauseResult}
+ */
+export function requestPause(state, seat) {
+  if (state.status !== GAME_STATUS.IN_PROGRESS) {
+    return { ok: false, error: 'Das Spiel läuft nicht.', fields: null };
+  }
+  if (pauseOf(state).state !== PAUSE_STATE.IDLE) {
+    return { ok: false, error: 'Es läuft bereits eine Pause-Anfrage.', fields: null };
+  }
+  return {
+    ok: true,
+    error: null,
+    fields: {
+      pause: {
+        state: PAUSE_STATE.REQUESTED,
+        requestedBy: seat,
+        resumeVotes: { host: false, guest: false },
+        pausedAt: null,
+      },
+    },
+  };
+}
+
+/**
+ * The opponent answers an open pause request. Accepting freezes the clock.
+ *
+ * @param {import('../models/game-state.js').GameState} state
+ * @param {string} seat Answering seat — must not be the requester.
+ * @param {boolean} accept
+ * @returns {PauseResult}
+ */
+export function respondToPause(state, seat, accept) {
+  const pause = pauseOf(state);
+  if (pause.state !== PAUSE_STATE.REQUESTED || pause.requestedBy === seat) {
+    return { ok: false, error: 'Keine offene Pause-Anfrage.', fields: null };
+  }
+  if (!accept) {
+    return { ok: true, error: null, fields: { pause: createIdlePause() } };
+  }
+  return {
+    ok: true,
+    error: null,
+    fields: {
+      pause: {
+        state: PAUSE_STATE.ACTIVE,
+        requestedBy: pause.requestedBy,
+        resumeVotes: { host: false, guest: false },
+        pausedAt: Date.now(),
+      },
+    },
+  };
+}
+
+/**
+ * A player consents to resuming. Only when both seats have voted does the game
+ * continue; the turn clock is shifted by the pause duration so no turn time is
+ * lost.
+ *
+ * @param {import('../models/game-state.js').GameState} state
+ * @param {string} seat Voting seat.
+ * @returns {PauseResult}
+ */
+export function voteResume(state, seat) {
+  const pause = pauseOf(state);
+  if (pause.state !== PAUSE_STATE.ACTIVE) {
+    return { ok: false, error: 'Das Spiel ist nicht pausiert.', fields: null };
+  }
+
+  const resumeVotes = { ...pause.resumeVotes, [seat]: true };
+  if (!resumeVotes.host || !resumeVotes.guest) {
+    return {
+      ok: true,
+      error: null,
+      fields: { pause: { ...pause, resumeVotes } },
+    };
+  }
+
+  const pausedForMs = Math.max(0, Date.now() - (pause.pausedAt ?? Date.now()));
+  return {
+    ok: true,
+    error: null,
+    fields: {
+      pause: createIdlePause(),
+      turnStartedAt: state.turnStartedAt + pausedForMs,
+    },
+  };
 }

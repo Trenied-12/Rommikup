@@ -104,6 +104,9 @@
           </div>
 
           <div class="controls" id="controls">
+            <button id="pause-btn" class="btn btn--ghost" type="button" title="Pause anfragen">
+              ⏸ Pause
+            </button>
             <button id="sort-color-btn" class="btn btn--ghost" type="button" title="Nach Farbe sortieren">
               Farbe
             </button>
@@ -122,6 +125,25 @@
           </div>
         </footer>
       </section>
+
+      <!-- Pause overlay: request popup for the opponent / paused screen for both -->
+      <div id="pause-overlay" class="overlay" hidden>
+        <div class="overlay__card">
+          <h2 id="pause-title">Pause</h2>
+          <p id="pause-text"></p>
+          <div class="overlay__actions">
+            <button id="pause-accept-btn" class="btn btn--primary" type="button">
+              Zustimmen
+            </button>
+            <button id="pause-decline-btn" class="btn btn--ghost" type="button">
+              Ablehnen
+            </button>
+            <button id="pause-resume-btn" class="btn btn--primary" type="button" hidden>
+              Weiter spielen
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Game-over overlay -->
       <div id="gameover-overlay" class="overlay" hidden>

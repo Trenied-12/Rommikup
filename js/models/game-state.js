@@ -24,16 +24,43 @@
  * @property {?string} lastAction                   Short note for the opponent.
  * @property {{ host: ?LastMove, guest: ?LastMove }} lastMoves  Most recent move per seat.
  * @property {{ host: ?string, guest: ?string }} devices  Stable device id per seat.
+ * @property {?LivePreview} livePreview             The active player's in-progress board.
+ * @property {Pause} pause                          Shared pause state.
  * @property {number} createdAt                     Epoch millis.
  * @property {number} updatedAt                     Epoch millis.
  *
  * @typedef {Object} LastMove
  * @property {'draw'|'meld'|'pass'} type  Drew a tile, played tiles, or passed (empty pool).
  * @property {number} tilesPlayed         How many tiles were laid down (0 for a draw/pass).
+ *
+ * @typedef {Object} LivePreview
+ * @property {string} seat        Seat currently experimenting (one of SEAT).
+ * @property {number} turnNumber  Turn the preview belongs to (stale ones are ignored).
+ * @property {import('../game/validation.js').Meld[]} board  The in-progress board.
+ *
+ * @typedef {Object} Pause
+ * @property {string} state                        One of PAUSE_STATE.
+ * @property {?string} requestedBy                 Seat that asked for the pause.
+ * @property {{ host: boolean, guest: boolean }} resumeVotes  Consent to resume.
+ * @property {?number} pausedAt                    Epoch millis the pause began.
  */
 
-import { GAME_STATUS, SEAT } from '../game/constants.js';
+import { GAME_STATUS, SEAT, PAUSE_STATE } from '../game/constants.js';
 import { dealNewGame } from '../game/tile-factory.js';
+
+/**
+ * Builds the neutral pause record (no pause, no open request).
+ *
+ * @returns {Pause}
+ */
+export function createIdlePause() {
+  return {
+    state: PAUSE_STATE.IDLE,
+    requestedBy: null,
+    resumeVotes: { host: false, guest: false },
+    pausedAt: null,
+  };
+}
 
 /**
  * Builds a fresh game state with both hands already dealt. The game waits for a
@@ -63,6 +90,8 @@ export function createInitialGameState({ roomCode, hostId, hostDeviceId = null }
     lastAction: null,
     lastMoves: { host: null, guest: null },
     devices: { host: hostDeviceId, guest: null },
+    livePreview: null,
+    pause: createIdlePause(),
     createdAt: now,
     updatedAt: now,
   };
