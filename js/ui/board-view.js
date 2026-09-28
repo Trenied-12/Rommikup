@@ -16,9 +16,11 @@ import { analyzeMeld } from '../game/validation.js';
  *
  * @param {HTMLElement} container The board element.
  * @param {import('../game/validation.js').Meld[]} board
- * @param {{ locked: boolean }} options When locked, tiles are not interactive.
+ * @param {{ locked: boolean, highlightTileIds?: Set<string> }} options
+ *        locked: tiles are not interactive. highlightTileIds: tiles to mark as
+ *        freshly played (used by the history replay).
  */
-export function renderBoard(container, board, { locked }) {
+export function renderBoard(container, board, { locked, highlightTileIds = null }) {
   clearElement(container);
   container.classList.toggle('board--locked', locked);
 
@@ -43,7 +45,9 @@ export function renderBoard(container, board, { locked }) {
     });
 
     for (const tile of meld.tiles) {
-      meldEl.append(renderTile(tile));
+      const tileEl = renderTile(tile);
+      if (highlightTileIds?.has(tile.id)) tileEl.classList.add('tile--fresh');
+      meldEl.append(tileEl);
     }
     container.append(meldEl);
   }

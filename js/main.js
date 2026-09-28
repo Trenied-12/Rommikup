@@ -1,77 +1,98 @@
 /**
  * @file main.js
  * @description Application entry point. Handles first-time setup checks, signs
- * the player in, drives the lobby (create / join), supports invite links and
- * hands control to the GameController once a room is chosen.
+ * the player in, drives the lobby (create / join / "Meine letzten Spiele"),
+ * supports invite and history links, and hands control to the game or the
+ * history screen. Also announces newly deployed versions of the app.
  */
 
-import { byId } from './ui/dom.js';
+import { byId, showScreen } from './ui/dom.js';
 import { toast, toastError } from './ui/notifications.js';
 import { isFirebaseConfigured } from './firebase/firebase-config.js';
 import { ensureSignedIn } from './firebase/auth.js';
 import { createGame, joinGameByCode } from './firebase/game-repository.js';
 import { GameController } from './app/game-controller.js';
+import { HistoryController } from './app/history-controller.js';
+import { RecentGamesController } from './app/recent-games-controller.js';
 import { ROOM_CODE_LENGTH } from './game/constants.js';
 import { getDeviceId } from './utils/device.js';
+import { getAppVersion, watchForUpdates } from './utils/version.js';
 
 /** Query-string key carrying a room code in an invite link. */
 const ROOM_PARAM = 'room';
 
+/** Query-string key carrying the room whose history is open. */
+const HISTORY_PARAM = 'history';
+
 /** @type {?GameController} */
-let controller = null;
+let gameController = null;
+/** @type {?HistoryController} */
+let historyController = null;
+/** @type {?RecentGamesController} */
+let recentGames = null;
 let uid = null;
 let deviceId = null;
 
-/** Shows only the lobby screen and resets transient UI. */
+/** Shows the lobby, resets transient UI and refreshes the game list. */
 function showLobby() {
-  byId('lobby-screen').hidden = false;
-  byId('waiting-screen').hidden = true;
-  byId('game-screen').hidden = true;
+  showScreen('lobby-screen');
   byId('gameover-overlay').hidden = true;
+  byId('pause-overlay').hidden = true;
   byId('lobby-message').textContent = '';
+  recentGames?.refresh();
 }
 
-/** Reads a room code from the current URL, if present. */
-function roomCodeFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get(ROOM_PARAM);
-  return code ? code.trim().toUpperCase() : null;
+/** Upper-cases and trims a room code from user input or the URL. */
+function normalizeCode(raw) {
+  return raw ? raw.trim().toUpperCase() : null;
 }
 
-/** Reflects the active room in the URL so it can be copied/shared. */
-function setUrlRoom(roomCode) {
-  const url = new URL(window.location.href);
-  url.searchParams.set(ROOM_PARAM, roomCode);
-  window.history.replaceState({}, '', url);
-}
-
-/** Clears the room from the URL when returning to the lobby. */
-function clearUrlRoom() {
+/**
+ * Reflects the current view in the URL (so it survives a reload and can be
+ * shared) — at most one of `room` / `history` is set at a time.
+ *
+ * @param {Object<string, string>} [params]
+ */
+function updateUrl(params = {}) {
   const url = new URL(window.location.href);
   url.searchParams.delete(ROOM_PARAM);
+  url.searchParams.delete(HISTORY_PARAM);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   window.history.replaceState({}, '', url);
 }
 
 /** Lazily creates the single GameController instance. */
-function getController() {
-  if (!controller) {
-    controller = new GameController({
+function getGameController() {
+  if (!gameController) {
+    gameController = new GameController({
       uid,
       deviceId,
       onExit: () => {
-        clearUrlRoom();
+        updateUrl();
         showLobby();
       },
+      onShowHistory: (roomCode, seat) => openHistory(roomCode, seat),
     });
   }
-  return controller;
+  return gameController;
 }
 
-/** Enters a room: updates URL, wires the copy-link button, starts the game. */
+/** Enters a room: updates the URL and starts observing the game. */
 function enterRoom(roomCode) {
-  setUrlRoom(roomCode);
+  updateUrl({ [ROOM_PARAM]: roomCode });
   byId('waiting-code').textContent = roomCode;
-  getController().start(roomCode);
+  getGameController().start(roomCode);
+}
+
+/**
+ * Opens the history ("Spielverlauf") of a game.
+ *
+ * @param {string} roomCode
+ * @param {?string} [seat] The viewer's seat, if already known.
+ */
+function openHistory(roomCode, seat = null) {
+  updateUrl({ [HISTORY_PARAM]: roomCode });
+  historyController.open(roomCode, { seat });
 }
 
 /** Handles the "create game" action. */
@@ -86,12 +107,12 @@ async function handleCreate() {
 }
 
 /**
- * Handles a join attempt from the form or an invite link.
+ * Handles a join attempt from the form, an invite link or "Fortsetzen".
  *
  * @param {string} rawCode
  */
 async function handleJoin(rawCode) {
-  const code = rawCode.trim().toUpperCase();
+  const code = normalizeCode(rawCode) ?? '';
   if (code.length !== ROOM_CODE_LENGTH) {
     byId('lobby-message').textContent = `Ein Raumcode hat ${ROOM_CODE_LENGTH} Zeichen.`;
     return;
@@ -106,10 +127,18 @@ async function handleJoin(rawCode) {
   }
 }
 
+/** Leaves the waiting room; the game stays open and can be resumed later. */
+function leaveWaitingRoom() {
+  gameController?.stop();
+  updateUrl();
+  showLobby();
+}
+
 /** Copies an invite link for the current room to the clipboard. */
 async function handleCopyLink() {
   const code = byId('waiting-code').textContent;
   const url = new URL(window.location.href);
+  url.search = '';
   url.searchParams.set(ROOM_PARAM, code);
   try {
     await navigator.clipboard.writeText(url.toString());
@@ -120,7 +149,7 @@ async function handleCopyLink() {
   }
 }
 
-/** Wires up the lobby and waiting-screen controls. */
+/** Wires up the lobby, waiting-room and update-banner controls. */
 function bindLobby() {
   byId('create-game-btn').addEventListener('click', handleCreate);
   byId('join-form').addEventListener('submit', (event) => {
@@ -128,11 +157,14 @@ function bindLobby() {
     handleJoin(byId('join-code-input').value);
   });
   byId('copy-link-btn').addEventListener('click', handleCopyLink);
+  byId('leave-waiting-btn').addEventListener('click', leaveWaitingRoom);
+  byId('update-reload-btn').addEventListener('click', () => window.location.reload());
 }
 
 /** Renders a fatal configuration error in place of the lobby. */
 function showConfigError() {
-  byId('lobby-screen').hidden = false;
+  showScreen('lobby-screen');
+  byId('recent-section').hidden = true;
   byId('lobby-message').innerHTML =
     'Firebase ist noch nicht konfiguriert. Trage deine Projektdaten in ' +
     '<code>js/firebase/firebase-config.js</code> ein (siehe README).';
@@ -143,6 +175,10 @@ function showConfigError() {
 /** Boots the application. */
 async function bootstrap() {
   bindLobby();
+  byId('app-version').textContent = `Version ${getAppVersion()}`;
+  watchForUpdates(() => {
+    byId('update-banner').hidden = false;
+  });
 
   if (!isFirebaseConfigured()) {
     showConfigError();
@@ -154,19 +190,39 @@ async function bootstrap() {
   try {
     uid = await ensureSignedIn();
   } catch (error) {
-    showLobby();
+    showScreen('lobby-screen');
     toastError(`Anmeldung fehlgeschlagen: ${error.message}`);
     return;
   }
 
-  const invitedCode = roomCodeFromUrl();
+  historyController = new HistoryController({
+    uid,
+    onClose: () => {
+      updateUrl();
+      showLobby();
+    },
+  });
+  recentGames = new RecentGamesController({
+    uid,
+    deviceId,
+    onViewHistory: (roomCode, seat) => openHistory(roomCode, seat),
+    onResume: (roomCode) => handleJoin(roomCode),
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const historyCode = normalizeCode(params.get(HISTORY_PARAM));
+  const invitedCode = normalizeCode(params.get(ROOM_PARAM));
+
+  if (historyCode) {
+    openHistory(historyCode);
+    return;
+  }
+
+  showLobby();
   if (invitedCode) {
-    // Arriving via an invite link: jump straight into joining.
-    showLobby();
+    // Arriving via an invite link (or a reload inside a game): rejoin directly.
     byId('join-code-input').value = invitedCode;
     await handleJoin(invitedCode);
-  } else {
-    showLobby();
   }
 }
 

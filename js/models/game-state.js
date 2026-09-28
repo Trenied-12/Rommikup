@@ -27,6 +27,8 @@
  * @property {?LivePreview} livePreview             The active player's in-progress board.
  * @property {Pause} pause                          Shared pause state.
  * @property {number} createdAt                     Epoch millis.
+ * @property {?number} startedAt                    Epoch millis the guest joined.
+ * @property {?number} finishedAt                   Epoch millis the game ended.
  * @property {number} updatedAt                     Epoch millis.
  *
  * @typedef {Object} LastMove
@@ -93,6 +95,8 @@ export function createInitialGameState({ roomCode, hostId, hostDeviceId = null }
     livePreview: null,
     pause: createIdlePause(),
     createdAt: now,
+    startedAt: null,
+    finishedAt: null,
     updatedAt: now,
   };
 }

@@ -49,9 +49,14 @@ export function byId(id) {
   return element;
 }
 
-/** Shows exactly one of the given screen elements, hiding the others. */
-export function showOnly(screenToShow, allScreens) {
-  for (const screen of allScreens) {
-    screen.hidden = screen !== screenToShow;
+/**
+ * Shows the screen with the given id and hides every other `.screen`, so only
+ * one full-page view (lobby, waiting room, game, history …) is ever visible.
+ *
+ * @param {string} screenId
+ */
+export function showScreen(screenId) {
+  for (const screen of document.querySelectorAll('.screen')) {
+    screen.hidden = screen.id !== screenId;
   }
 }

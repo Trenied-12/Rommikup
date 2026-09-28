@@ -100,3 +100,31 @@ export const PAUSE_STATE = Object.freeze({
   /** Both agreed — the clock is frozen and all interaction is blocked. */
   ACTIVE: 'active',
 });
+
+/** What happened in a single entry of the game history ("Spielverlauf"). */
+export const HISTORY_ACTION = Object.freeze({
+  /** The initial deal, before anyone has moved. */
+  START: 'start',
+  /** Tiles were laid down / the board was rearranged. */
+  MELD: 'meld',
+  /** A tile was drawn from the pool. */
+  DRAW: 'draw',
+  /** The pool was empty, so the player had to pass. */
+  PASS: 'pass',
+});
+
+/**
+ * Digits used for history entry document ids ("0000", "0001", …) so that the
+ * ids sort in turn order and a game can hold up to 9999 recorded turns.
+ */
+export const HISTORY_ID_DIGITS = 4;
+
+/** Outcome of a finished game from one player's point of view. */
+export const GAME_RESULT = Object.freeze({
+  WON: 'won',
+  LOST: 'lost',
+  DRAW: 'draw',
+});
+
+/** How many entries the "Meine letzten Spiele" list loads. */
+export const RECENT_GAMES_LIMIT = 25;

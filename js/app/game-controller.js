@@ -13,9 +13,13 @@
  * Pause: either player may request a pause; the opponent gets a popup to
  * accept or decline. While paused the clock is frozen and all interaction is
  * blocked. The game resumes only after BOTH players consent.
+ *
+ * History: every completed move is saved together with a snapshot of the whole
+ * game, so it can be replayed afterwards ("Spielverlauf"). Each player also
+ * keeps a small personal record of the game for "Meine letzten Spiele".
  */
 
-import { byId } from '../ui/dom.js';
+import { byId, showScreen } from '../ui/dom.js';
 import { renderBoard } from '../ui/board-view.js';
 import { renderRack, sortByColor, sortByNumber } from '../ui/rack-view.js';
 import { renderStatusBar } from '../ui/status-bar.js';
@@ -37,14 +41,24 @@ import {
   voteResume,
 } from '../game/game-engine.js';
 import {
+  buildSnapshot,
+  buildSummary,
+  resultForSeat,
+  finalPenalties,
+  endedByGoingOut,
+} from '../game/history.js';
+import {
   subscribeToGame,
-  saveGame,
+  saveTurn,
   fetchGame,
   updateGameFields,
 } from '../firebase/game-repository.js';
-import { recordResult, subscribeStats } from '../firebase/stats-repository.js';
+import { subscribeStats } from '../firebase/stats-repository.js';
+import { saveSummary } from '../firebase/summary-repository.js';
+import { recordResultOnce } from './result-recorder.js';
 import {
   GAME_STATUS,
+  GAME_RESULT,
   PAUSE_STATE,
   TURN_DURATION_MS,
 } from '../game/constants.js';
@@ -85,12 +99,18 @@ function boardSignature(board) {
 
 export class GameController {
   /**
-   * @param {{ uid: string, deviceId: string, onExit: () => void }} deps
+   * @param {{
+   *   uid: string,
+   *   deviceId: string,
+   *   onExit: () => void,
+   *   onShowHistory: (roomCode: string, seat: string) => void,
+   * }} deps
    */
-  constructor({ uid, deviceId, onExit }) {
+  constructor({ uid, deviceId, onExit, onShowHistory }) {
     this.uid = uid;
     this.deviceId = deviceId;
     this.onExit = onExit;
+    this.onShowHistory = onShowHistory;
 
     /** @type {?import('../models/game-state.js').GameState} */
     this.state = null;
@@ -118,7 +138,11 @@ export class GameController {
     this.unsubscribe = null;
     this.dragController = null;
     this.gameOverShown = false;
-    this.resultRecorded = false;
+
+    /** Game status last written to this player's "Meine letzten Spiele" entry. */
+    this.summaryStatus = null;
+    /** Warn only once per game when the history cannot be saved. */
+    this.historyWarningShown = false;
 
     /** The turn for which we already auto-ended on timeout (avoids re-firing). */
     this.timedOutTurn = null;
@@ -136,6 +160,7 @@ export class GameController {
    * @param {string} roomCode
    */
   start(roomCode) {
+    if (this.unsubscribe) this.stop(); // switching games: drop the old session
     this.roomCode = roomCode;
     this.unsubscribe = subscribeToGame(
       roomCode,
@@ -162,8 +187,10 @@ export class GameController {
     this.stats = { you: null, opp: null };
     this.lastPause = { state: PAUSE_STATE.IDLE, requestedBy: null };
     this.gameOverShown = false;
-    this.resultRecorded = false;
+    this.summaryStatus = null;
+    this.historyWarningShown = false;
     this.timedOutTurn = null;
+    byId('pause-overlay').hidden = true;
   }
 
   // ----------------------------------------------------------------- private
@@ -227,16 +254,15 @@ export class GameController {
     }
 
     this.#render();
-    this.#recordResultOnce();
+    this.#syncSummary();
+    this.#recordResult();
     this.#maybeShowGameOver();
   }
 
   /** Switches between waiting and game screens based on status. */
   #updateScreens() {
     const waiting = this.state.status === GAME_STATUS.WAITING_FOR_OPPONENT;
-    byId('waiting-screen').hidden = !waiting;
-    byId('game-screen').hidden = waiting;
-    byId('lobby-screen').hidden = true;
+    showScreen(waiting ? 'waiting-screen' : 'game-screen');
 
     if (waiting) {
       byId('waiting-code').textContent = this.state.roomCode;
@@ -459,25 +485,22 @@ export class GameController {
     }
   }
 
-  /** Records this device's win/loss exactly once per finished game. */
-  #recordResultOnce() {
-    if (this.state.status !== GAME_STATUS.FINISHED) return;
-    if (this.resultRecorded || !this.state.winner || !this.mySeat) return;
+  /** Adds a finished game to this device's win/loss tally (once per game). */
+  #recordResult() {
+    if (this.state.status !== GAME_STATUS.FINISHED || !this.mySeat) return;
+    recordResultOnce(this.roomCode, this.deviceId, resultForSeat(this.state, this.mySeat));
+  }
 
-    const flag = `rummikub.recorded.${this.roomCode}`;
-    try {
-      if (localStorage.getItem(flag)) {
-        this.resultRecorded = true;
-        return;
-      }
-      localStorage.setItem(flag, '1');
-    } catch {
-      // Storage unavailable — fall back to the in-memory guard only.
-    }
-
-    this.resultRecorded = true;
-    recordResult(this.deviceId, this.state.winner === this.mySeat).catch(() => {
-      /* a missed stat update is not worth interrupting the game */
+  /**
+   * Keeps this player's "Meine letzten Spiele" entry current. Written whenever
+   * the game status changes (waiting → running → finished), so the list knows
+   * the result without loading the game.
+   */
+  #syncSummary() {
+    if (!this.mySeat || this.state.status === this.summaryStatus) return;
+    this.summaryStatus = this.state.status;
+    saveSummary(this.uid, buildSummary(this.state, this.mySeat)).catch(() => {
+      /* the list repairs itself from the game document on the next load */
     });
   }
 
@@ -498,6 +521,13 @@ export class GameController {
       byId('gameover-overlay').hidden = true;
       this.stop();
       this.onExit();
+    });
+    byId('gameover-history-btn').addEventListener('click', () => {
+      // Capture before stop() clears the session.
+      const { roomCode, mySeat } = this;
+      byId('gameover-overlay').hidden = true;
+      this.stop();
+      this.onShowHistory(roomCode, mySeat);
     });
   }
 
@@ -594,7 +624,7 @@ export class GameController {
     const result = drawTile(this.state, activeSeat);
     if (!result.ok) return; // turn already changed / game ended in the meantime
     if (mine) toast('Zeit abgelaufen – Zug wurde automatisch beendet.');
-    await this.#persist(result.state);
+    await this.#persist(result.state, { timedOut: true });
   }
 
   // --------------------------------------------------------------- game moves
@@ -612,12 +642,24 @@ export class GameController {
         // When it is not our turn we may only reorder our own rack.
         if (!myTurn && target.zone !== 'rack') return;
 
+        // Tiles that were already on the table when the turn began can be
+        // rearranged, but never taken back onto the rack.
+        if (myTurn && target.zone === 'rack' && this.#wasOnTableAtTurnStart(tileId)) {
+          toastError('Dieser Stein lag schon auf dem Spielfeld und kann nicht zurück auf dein Brett.');
+          return;
+        }
+
         this.working = applyDrop(this.working, tileId, target);
         this.#syncHandOrder();
         this.#render();
         this.#publishPreviewSoon();
       },
     });
+  }
+
+  /** True when the tile lay on the authoritative board at the start of this turn. */
+  #wasOnTableAtTurnStart(tileId) {
+    return this.state.board.some((meld) => meld.tiles.some((tile) => tile.id === tileId));
   }
 
   /** Validates and submits the current working turn. */
@@ -673,14 +715,28 @@ export class GameController {
 
   /**
    * Optimistically applies the new state locally for instant feedback, then
-   * persists it to Firestore.
+   * persists it to Firestore together with its history snapshot.
+   *
+   * @param {import('../models/game-state.js').GameState} newState
+   * @param {{ timedOut?: boolean }} [meta] timedOut: move forced by the timer.
    */
-  async #persist(newState) {
+  async #persist(newState, { timedOut = false } = {}) {
     // Any queued preview write belongs to the turn that just ended.
     clearTimeout(this.previewTimer);
+    // The seat that just moved — read before the optimistic update replaces it.
+    const actor = this.state.currentTurn;
+    const snapshot = buildSnapshot(newState, { actor, timedOut });
+
     this.#onState(newState); // optimistic local update
     try {
-      await saveGame(this.roomCode, newState);
+      const { historySaved } = await saveTurn(this.roomCode, newState, snapshot);
+      if (!historySaved && !this.historyWarningShown) {
+        this.historyWarningShown = true;
+        toastError(
+          'Hinweis: Der Spielverlauf wird nicht gespeichert – bitte die neuen ' +
+            'Firestore-Regeln veröffentlichen.',
+        );
+      }
     } catch (error) {
       toastError(`Speichern fehlgeschlagen: ${error.message}`);
     }
@@ -692,18 +748,28 @@ export class GameController {
     this.gameOverShown = true;
     byId('pause-overlay').hidden = true;
 
-    const won = this.state.winner === this.mySeat;
-    const draw = this.state.winner == null;
-    byId('gameover-title').textContent = draw
-      ? 'Unentschieden'
-      : won
+    const result = resultForSeat(this.state, this.mySeat);
+    byId('gameover-title').textContent =
+      result === GAME_RESULT.WON
         ? 'Du hast gewonnen! 🎉'
-        : 'Du hast verloren';
-    byId('gameover-text').textContent = draw
-      ? 'Beide Spieler haben gleich viele Punkte.'
-      : won
-        ? 'Alle deine Steine sind abgelegt.'
-        : 'Dein Gegner war zuerst fertig.';
+        : result === GAME_RESULT.LOST
+          ? 'Du hast verloren'
+          : 'Unentschieden';
+    byId('gameover-text').textContent = this.#gameOverText(result);
     byId('gameover-overlay').hidden = false;
+  }
+
+  /** Explains how the game ended, including the remaining points. */
+  #gameOverText(result) {
+    const penalties = finalPenalties(this.state);
+    const mine = penalties[this.mySeat];
+    const theirs = penalties[otherSeat(this.mySeat)];
+
+    if (endedByGoingOut(this.state)) {
+      return result === GAME_RESULT.WON
+        ? `Alle deine Steine sind abgelegt. Dein Gegner hatte noch ${theirs} Punkte auf der Hand.`
+        : `Dein Gegner war zuerst fertig. Du hattest noch ${mine} Punkte auf der Hand.`;
+    }
+    return `Der Stapel ist leer – Endwertung: Du ${mine} Punkte, Gegner ${theirs} Punkte (weniger ist besser).`;
   }
 }

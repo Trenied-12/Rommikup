@@ -7,6 +7,7 @@ node_modules/
 # Nur zum Entwickeln – bleibt lokal, wird nicht auf GitHub Pages veröffentlicht
 tests/
 dev/
+tools/
 package.json
 
 # Dokumentation & Konfig-Referenz – lokal behalten, nicht öffentlich

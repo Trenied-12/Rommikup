@@ -1,0 +1,311 @@
+/**
+ * history.css
+ * The game history ("Spielverlauf") screen: header, perspective toolbar, the
+ * two racks around the board, and the timeline / playback controls.
+ */
+
+/* The whole screen scrolls on small devices instead of squeezing the board. */
+.history {
+  overflow-y: auto;
+}
+
+/* ============================== Header ============================== */
+.history-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-soft);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.history-bar__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-bar__heading {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.history-bar__meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ============================== Toolbar ============================= */
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+}
+
+/* Two-state switch: "Deine Sicht" / "Sicht des Gegners". */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.segmented__btn {
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.segmented__btn + .segmented__btn {
+  border-left: 1px solid var(--color-border);
+}
+
+.segmented__btn--active {
+  background: var(--color-accent);
+  color: #2a1c05;
+}
+
+.history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.history-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+}
+
+/* ======================== Message / content ======================== */
+.history-message {
+  margin: auto;
+  padding: var(--space-6) var(--space-4);
+  max-width: 460px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.history-content {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--space-4);
+  gap: var(--space-2);
+}
+
+/* Replay racks are a little smaller than the live game's. */
+.history-hand {
+  --tile-width: 36px;
+  --tile-height: 50px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.history-hand .tile {
+  font-size: 1.15rem;
+}
+
+.history-hand .tile::after {
+  width: 12px;
+  height: 12px;
+  bottom: 4px;
+}
+
+.history-hand .tile__value {
+  margin-bottom: 8px;
+}
+
+.history-hand .rack {
+  min-height: calc(var(--tile-height) + var(--space-3));
+  padding: var(--space-2);
+}
+
+.history-hand__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+}
+
+.history-board-area {
+  flex: 1 0 auto;
+  min-height: 200px;
+  padding: 0;
+  overflow: visible;
+}
+
+/* ============================= Controls ============================= */
+.history-controls {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-bg-soft);
+  border-top: 1px solid var(--color-border);
+}
+
+.history-step {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.history-step__text {
+  min-width: 0;
+}
+
+.history-step__title {
+  font-weight: 700;
+}
+
+.history-step__detail {
+  font-size: 0.85rem;
+  color: var(--color-accent);
+}
+
+.history-step__meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-slider {
+  width: 100%;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.history-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.history-play {
+  min-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.history-speed {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 7px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ============================ Turn list ============================= */
+.history-turns {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-bg-soft);
+}
+
+.history-turns summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.history-turns__list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  max-height: 28vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.history-turns__btn {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-turns__btn:hover {
+  background: var(--color-surface);
+}
+
+.history-turns__item--active .history-turns__btn {
+  background: rgba(242, 163, 65, 0.18);
+}
+
+.history-turns__index {
+  min-width: 42px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-turns__text {
+  flex: 1;
+}
+
+.history-turns__time {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================== Phones ============================== */
+@media (max-width: 720px) {
+  /* One compact row: ⏮ ◂ [ ▶ Abspielen ] ▸ ⏭ speed */
+  .history-buttons {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto auto auto;
+    gap: 6px;
+  }
+
+  .history-buttons .btn--ghost {
+    padding: 8px 10px;
+  }
+
+  .history-play {
+    min-width: 0;
+  }
+
+  .history-controls {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+  }
+}
+
+@media (max-width: 400px) {
+  .history-play__label {
+    display: none;
+  }
+}

@@ -6,7 +6,8 @@
  * rules live in this file (those belong to the engine).
  *
  * Document model: one document per game at `games/{ROOMCODE}`. The room code
- * doubles as the document id so a player can join purely from the code.
+ * doubles as the document id so a player can join purely from the code. The
+ * turn-by-turn history lives in the `history` sub-collection of that document.
  */
 
 import {
@@ -16,14 +17,20 @@ import {
   updateDoc,
   onSnapshot,
   runTransaction,
+  writeBatch,
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 import { db } from './firebase-init.js';
+import { historyRef, saveHistoryEntry } from './history-repository.js';
 import { createInitialGameState, seatForUid } from '../models/game-state.js';
 import { joinGame } from '../game/game-engine.js';
+import { buildSnapshot } from '../game/history.js';
 import { generateRoomCode } from '../utils/random.js';
 import { GAME_STATUS } from '../game/constants.js';
+
+/** Firestore error code for a request rejected by the security rules. */
+const PERMISSION_DENIED = 'permission-denied';
 
 /** Firestore collection that holds all games. */
 const GAMES_COLLECTION = 'games';
@@ -48,6 +55,21 @@ function toDocument(state) {
 }
 
 /**
+ * Like {@link toDocument}, but for completed turns: the `pause` record is left
+ * out because it is owned by partial updates (either player may request a
+ * pause at any moment), and a turn saved concurrently must never overwrite it.
+ * Used together with `{ merge: true }`, so omitted fields keep their stored
+ * value.
+ *
+ * @param {import('../models/game-state.js').GameState} state
+ * @returns {Object}
+ */
+function toTurnDocument(state) {
+  const { pause: _ownedByPartialUpdates, ...turnFields } = state;
+  return { ...turnFields, updatedAt: serverTimestamp() };
+}
+
+/**
  * Creates a brand-new game with a unique room code.
  *
  * @param {string} hostId Auth uid of the creating player.
@@ -58,18 +80,24 @@ export async function createGame(hostId, hostDeviceId = null) {
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
     const roomCode = generateRoomCode();
     const ref = gameRef(roomCode);
+    let createdState = null;
 
     // Use a transaction so two simultaneous creates can't claim one code.
     const created = await runTransaction(db, async (transaction) => {
       const existing = await transaction.get(ref);
       if (existing.exists()) return false;
 
-      const state = createInitialGameState({ roomCode, hostId, hostDeviceId });
-      transaction.set(ref, toDocument(state));
+      createdState = createInitialGameState({ roomCode, hostId, hostDeviceId });
+      transaction.set(ref, toDocument(createdState));
       return true;
     });
 
-    if (created) return { roomCode };
+    if (created) {
+      // Record the initial deal as history entry 0. Best effort: a missing
+      // history must never stop a game from being created.
+      saveHistoryEntry(roomCode, buildSnapshot(createdState)).catch(() => {});
+      return { roomCode };
+    }
   }
 
   throw new Error('Konnte keinen freien Raumcode erzeugen. Bitte erneut versuchen.');
@@ -124,16 +152,32 @@ export async function fetchGame(roomCode) {
 }
 
 /**
- * Persists a full game state (e.g. after a committed turn). The whole document
- * is replaced, which keeps the engine the single source of truth — Firestore
- * never holds a partially-applied turn.
+ * Persists a completed move: the new game state together with its history
+ * entry, atomically in one batch — so Firestore never holds a turn without its
+ * history entry (or the other way round).
+ *
+ * If the history is rejected by the security rules (e.g. the updated rules
+ * have not been published yet), the turn itself is still saved: the game must
+ * never get stuck because of the history.
  *
  * @param {string} roomCode
  * @param {import('../models/game-state.js').GameState} state
- * @returns {Promise<void>}
+ * @param {import('../game/history.js').HistorySnapshot} snapshot
+ * @returns {Promise<{ historySaved: boolean }>}
  */
-export async function saveGame(roomCode, state) {
-  await setDoc(gameRef(roomCode), toDocument(state));
+export async function saveTurn(roomCode, state, snapshot) {
+  const turnData = toTurnDocument(state);
+  try {
+    const batch = writeBatch(db);
+    batch.set(gameRef(roomCode), turnData, { merge: true });
+    batch.set(historyRef(roomCode, snapshot.index), snapshot);
+    await batch.commit();
+    return { historySaved: true };
+  } catch (error) {
+    if (error?.code !== PERMISSION_DENIED) throw error;
+    await setDoc(gameRef(roomCode), turnData, { merge: true });
+    return { historySaved: false };
+  }
 }
 
 /**

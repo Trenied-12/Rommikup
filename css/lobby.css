@@ -1,6 +1,7 @@
 /**
  * lobby.css
- * Styling for the lobby (create/join) and the waiting-for-opponent screen.
+ * Styling for the lobby (create / join / "Meine letzten Spiele") and the
+ * waiting-for-opponent screen.
  */
 
 .lobby,
@@ -10,9 +11,20 @@
   padding: var(--space-4);
 }
 
+/* The lobby can outgrow short screens (game list), so it scrolls; the card's
+   auto margins keep it centred while there is room. */
+.lobby {
+  justify-content: flex-start;
+  overflow-y: auto;
+}
+
+.lobby__card {
+  margin: auto 0;
+}
+
 .lobby__card,
 .waiting__card {
-  width: min(440px, 100%);
+  width: min(480px, 100%);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -113,6 +125,123 @@
   font-weight: 500;
 }
 
+.lobby__version {
+  margin: var(--space-4) 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+/* ----------------------- Meine letzten Spiele ----------------------- */
+.recent {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.recent__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.recent__title {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+}
+
+.recent__tally {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.recent__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
+.recent__message {
+  padding: var(--space-3);
+  text-align: center;
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.recent-item {
+  --result-color: var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--result-color);
+}
+
+.recent-item--won {
+  --result-color: var(--color-success);
+}
+
+.recent-item--lost {
+  --result-color: var(--color-danger);
+}
+
+.recent-item--draw {
+  --result-color: #6b7a8f;
+}
+
+.recent-item--open {
+  --result-color: var(--color-info);
+}
+
+.recent-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-item__top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.recent-item__date {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.recent-item__meta {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.recent-item__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.recent-item__remove {
+  padding: 6px 8px;
+}
+
 /* ---------------------------- Waiting ---------------------------- */
 .waiting__hint {
   color: var(--color-text-muted);
@@ -129,4 +258,11 @@
   border-radius: var(--radius-md);
   padding: var(--space-3);
   margin: var(--space-3) 0 var(--space-4);
+}
+
+.waiting__actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }

@@ -4,12 +4,63 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="description" content="Rummikub online für zwei Spieler – Echtzeit-Multiplayer im Browser." />
+    <meta name="app-version" content="15e11311" />
     <title>Rummikub Online</title>
 
-    <link rel="stylesheet" href="./css/main.css" />
-    <link rel="stylesheet" href="./css/lobby.css" />
-    <link rel="stylesheet" href="./css/tiles.css" />
-    <link rel="stylesheet" href="./css/board.css" />
+    <!--
+      Cache-busting: tools/build.mjs stamps a content hash (?v=…) onto every
+      stylesheet and module and writes the import map below, so browsers always
+      load matching, up-to-date files. Do not edit the generated block by hand.
+    -->
+    <!-- build:importmap -->
+    <script type="importmap">
+      {
+        "imports": {
+          "./js/app/game-controller.js": "./js/app/game-controller.js?v=b02ec62882",
+          "./js/app/history-controller.js": "./js/app/history-controller.js?v=a2d49f435f",
+          "./js/app/recent-games-controller.js": "./js/app/recent-games-controller.js?v=92b5a72512",
+          "./js/app/result-recorder.js": "./js/app/result-recorder.js?v=266129779a",
+          "./js/dnd/drag-drop.js": "./js/dnd/drag-drop.js?v=0a09d23f71",
+          "./js/firebase/auth.js": "./js/firebase/auth.js?v=d03550ccc7",
+          "./js/firebase/firebase-config.js": "./js/firebase/firebase-config.js?v=5f1e7482af",
+          "./js/firebase/firebase-init.js": "./js/firebase/firebase-init.js?v=2f3e69988e",
+          "./js/firebase/game-repository.js": "./js/firebase/game-repository.js?v=b7f15b12c8",
+          "./js/firebase/history-repository.js": "./js/firebase/history-repository.js?v=1ccf6be260",
+          "./js/firebase/stats-repository.js": "./js/firebase/stats-repository.js?v=10a069d6da",
+          "./js/firebase/summary-repository.js": "./js/firebase/summary-repository.js?v=9e50a8b731",
+          "./js/game/constants.js": "./js/game/constants.js?v=8493e0bc47",
+          "./js/game/game-engine.js": "./js/game/game-engine.js?v=ee1778907e",
+          "./js/game/history.js": "./js/game/history.js?v=703379bdf5",
+          "./js/game/scoring.js": "./js/game/scoring.js?v=927715b15e",
+          "./js/game/tile-factory.js": "./js/game/tile-factory.js?v=10e4b77856",
+          "./js/game/validation.js": "./js/game/validation.js?v=559647b0c3",
+          "./js/main.js": "./js/main.js?v=27081daf0f",
+          "./js/models/game-state.js": "./js/models/game-state.js?v=d7246cd4b0",
+          "./js/models/tile.js": "./js/models/tile.js?v=788b20b2a4",
+          "./js/models/working-turn.js": "./js/models/working-turn.js?v=7d769778d6",
+          "./js/ui/board-view.js": "./js/ui/board-view.js?v=c9c26cbc38",
+          "./js/ui/dom.js": "./js/ui/dom.js?v=5e752d5510",
+          "./js/ui/history-view.js": "./js/ui/history-view.js?v=5520d59f2d",
+          "./js/ui/notifications.js": "./js/ui/notifications.js?v=4686fb0b78",
+          "./js/ui/rack-view.js": "./js/ui/rack-view.js?v=2c589f105c",
+          "./js/ui/recent-games-view.js": "./js/ui/recent-games-view.js?v=8a639c705f",
+          "./js/ui/result-badge.js": "./js/ui/result-badge.js?v=2f9c1ef9c6",
+          "./js/ui/status-bar.js": "./js/ui/status-bar.js?v=ce18e42cc3",
+          "./js/ui/tile-view.js": "./js/ui/tile-view.js?v=f78b34ed72",
+          "./js/utils/device.js": "./js/utils/device.js?v=f5175f9e1e",
+          "./js/utils/format.js": "./js/utils/format.js?v=333167e2b7",
+          "./js/utils/random.js": "./js/utils/random.js?v=f4f816e1e7",
+          "./js/utils/version.js": "./js/utils/version.js?v=829e977cc2"
+        }
+      }
+    </script>
+    <!-- /build:importmap -->
+
+    <link rel="stylesheet" href="./css/main.css?v=cfb51d388e" />
+    <link rel="stylesheet" href="./css/lobby.css?v=b6b49c24a6" />
+    <link rel="stylesheet" href="./css/tiles.css?v=808f312e92" />
+    <link rel="stylesheet" href="./css/board.css?v=11cdf68ca7" />
+    <link rel="stylesheet" href="./css/history.css?v=2a94e8ff9e" />
   </head>
   <body>
     <!-- ===================== App root ===================== -->
@@ -42,6 +93,17 @@
           </div>
 
           <p id="lobby-message" class="lobby__message" role="status"></p>
+
+          <!-- Recent games ("Meine letzten Spiele") -->
+          <section id="recent-section" class="recent" aria-labelledby="recent-title">
+            <div class="recent__header">
+              <h2 id="recent-title" class="recent__title">Meine letzten Spiele</h2>
+              <span id="recent-tally" class="recent__tally"></span>
+            </div>
+            <ul id="recent-list" class="recent__list"></ul>
+          </section>
+
+          <p id="app-version" class="lobby__version"></p>
         </div>
       </section>
 
@@ -52,9 +114,14 @@
           <h2>Warte auf den zweiten Spieler …</h2>
           <p class="waiting__hint">Teile diesen Code oder Link mit deinem Gegner:</p>
           <div class="waiting__code" id="waiting-code">—</div>
-          <button id="copy-link-btn" class="btn btn--secondary" type="button">
-            Einladungslink kopieren
-          </button>
+          <div class="waiting__actions">
+            <button id="copy-link-btn" class="btn btn--secondary" type="button">
+              Einladungslink kopieren
+            </button>
+            <button id="leave-waiting-btn" class="btn btn--ghost" type="button">
+              Zurück zur Lobby
+            </button>
+          </div>
         </div>
       </section>
 
@@ -126,6 +193,90 @@
         </footer>
       </section>
 
+      <!-- Game history (replay) screen -->
+      <section id="history-screen" class="screen history" hidden>
+        <header class="history-bar">
+          <button id="history-back-btn" class="btn btn--ghost" type="button">← Zurück</button>
+          <div class="history-bar__title">
+            <span class="history-bar__heading">Spielverlauf</span>
+            <span class="history-bar__meta" id="history-meta">—</span>
+          </div>
+          <span id="history-result" class="result-badge" hidden></span>
+        </header>
+
+        <div class="history-toolbar" id="history-toolbar">
+          <div class="segmented" role="group" aria-label="Perspektive">
+            <button id="history-view-me" class="segmented__btn segmented__btn--active" type="button" aria-pressed="true">
+              Deine Sicht
+            </button>
+            <button id="history-view-opp" class="segmented__btn" type="button" aria-pressed="false">
+              Sicht des Gegners
+            </button>
+          </div>
+          <label class="history-toggle">
+            <input id="history-reveal" type="checkbox" />
+            Andere Hand aufdecken
+          </label>
+        </div>
+
+        <p class="history-message" id="history-message" hidden></p>
+
+        <div class="history-content" id="history-content">
+          <div class="history-hand">
+            <span class="history-hand__label" id="history-top-label"></span>
+            <div class="rack rack--locked" id="history-top-rack"></div>
+          </div>
+
+          <div class="board-area history-board-area">
+            <div class="board board--locked" id="history-board"></div>
+          </div>
+
+          <div class="history-hand">
+            <span class="history-hand__label" id="history-bottom-label"></span>
+            <div class="rack rack--locked" id="history-bottom-rack"></div>
+          </div>
+        </div>
+
+        <footer class="history-controls" id="history-controls">
+          <div class="history-step">
+            <div class="history-step__text">
+              <div class="history-step__title" id="history-step-title">—</div>
+              <div class="history-step__detail" id="history-step-detail"></div>
+            </div>
+            <div class="history-step__meta" id="history-step-meta"></div>
+          </div>
+
+          <input
+            id="history-slider"
+            class="history-slider"
+            type="range"
+            min="0"
+            max="0"
+            value="0"
+            step="1"
+            aria-label="Zeitpunkt im Spiel"
+          />
+
+          <div class="history-buttons">
+            <button id="history-first-btn" class="btn btn--ghost" type="button" title="Zum Spielbeginn (Pos1)" aria-label="Zum Spielbeginn">⏮</button>
+            <button id="history-prev-btn" class="btn btn--ghost" type="button" title="Vorheriger Zug (←)" aria-label="Vorheriger Zug">◂</button>
+            <button id="history-play-btn" class="btn btn--primary history-play" type="button" title="Abspielen / Pause (Leertaste)">
+              <span class="history-play__icon" id="history-play-icon">▶</span>
+              <span class="history-play__label" id="history-play-label">Abspielen</span>
+            </button>
+            <button id="history-next-btn" class="btn btn--ghost" type="button" title="Nächster Zug (→)" aria-label="Nächster Zug">▸</button>
+            <button id="history-last-btn" class="btn btn--ghost" type="button" title="Zum Spielende (Ende)" aria-label="Zum Spielende">⏭</button>
+            <select id="history-speed" class="history-speed" aria-label="Abspielgeschwindigkeit"></select>
+          </div>
+        </footer>
+
+        <!-- Outside the sticky controls, so opening it never covers the board. -->
+        <details class="history-turns" id="history-turns">
+          <summary>Alle Züge</summary>
+          <ol class="history-turns__list" id="history-turn-list"></ol>
+        </details>
+      </section>
+
       <!-- Pause overlay: request popup for the opponent / paused screen for both -->
       <div id="pause-overlay" class="overlay" hidden>
         <div class="overlay__card">
@@ -150,16 +301,27 @@
         <div class="overlay__card">
           <h2 id="gameover-title">Spiel beendet</h2>
           <p id="gameover-text"></p>
-          <button id="play-again-btn" class="btn btn--primary" type="button">
-            Zur Lobby
-          </button>
+          <div class="overlay__actions">
+            <button id="gameover-history-btn" class="btn btn--primary" type="button">
+              Spielverlauf ansehen
+            </button>
+            <button id="play-again-btn" class="btn btn--ghost" type="button">
+              Zur Lobby
+            </button>
+          </div>
         </div>
+      </div>
+
+      <!-- Shown when a newer version of the app has been deployed -->
+      <div id="update-banner" class="update-banner" role="status" hidden>
+        <span>Eine neue Version ist verfügbar.</span>
+        <button id="update-reload-btn" class="btn btn--small" type="button">Neu laden</button>
       </div>
 
       <!-- Toast notifications -->
       <div id="toast-container" class="toast-container" aria-live="polite"></div>
     </div>
 
-    <script type="module" src="./js/main.js"></script>
+    <script type="module" src="./js/main.js?v=27081daf0f"></script>
   </body>
 </html>

@@ -87,6 +87,13 @@
   outline-offset: 1px;
 }
 
+/* History replay: a tile that was freshly played in the shown move. */
+.tile--fresh {
+  outline: 3px solid #ffe04a;
+  outline-offset: 1px;
+  box-shadow: 0 0 10px rgba(255, 224, 74, 0.65);
+}
+
 /* When tiles cannot be moved (not your turn) dim the grab affordance. */
 .rack--locked .tile,
 .board--locked .tile {

@@ -1,7 +1,8 @@
 /**
  * main.css
- * Design tokens, base layout, shared components (buttons, toast, overlay).
- * Component-specific styles live in lobby.css, tiles.css and board.css.
+ * Design tokens, base layout, shared components (buttons, badges, toast,
+ * overlay, update banner). Component-specific styles live in lobby.css,
+ * tiles.css, board.css and history.css.
  */
 
 :root {
@@ -135,6 +136,61 @@ body {
 .btn--ghost:hover {
   color: var(--color-text);
   background: var(--color-surface);
+}
+
+.btn--small {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+/* ========================== Result badges ========================== */
+/* "Gewonnen / Verloren / Unentschieden / Läuft / Wartet" */
+.result-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--color-surface-soft);
+}
+
+.result-badge--won {
+  background: var(--color-success);
+}
+
+.result-badge--lost {
+  background: var(--color-danger);
+}
+
+.result-badge--draw {
+  background: #6b7a8f;
+}
+
+.result-badge--open {
+  background: var(--color-info);
+}
+
+/* ========================== Update banner ========================== */
+.update-banner {
+  position: fixed;
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: calc(100vw - 2 * var(--space-3));
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-info);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
 }
 
 /* ============================= Spinner ============================= */

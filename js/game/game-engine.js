@@ -72,6 +72,7 @@ export function joinGame(state, guestId, guestDeviceId = null) {
     status: GAME_STATUS.IN_PROGRESS,
     devices: { ...state.devices, guest: guestDeviceId },
     turnStartedAt: Date.now(), // the host's first turn clock starts now
+    startedAt: Date.now(),
     updatedAt: Date.now(),
   };
 }
@@ -100,7 +101,13 @@ export function drawTile(state, seat) {
   if (pool.length === 0) {
     const passes = (state.consecutivePasses ?? 0) + 1;
     if (passes >= 2) {
-      return endGameByExhaustion(state);
+      // The deciding pass is a move of its own (recorded in the history).
+      return endGameByExhaustion({
+        ...state,
+        turnNumber: state.turnNumber + 1,
+        consecutivePasses: passes,
+        lastMoves: { ...state.lastMoves, [seat]: { type: 'pass', tilesPlayed: 0 } },
+      });
     }
     return {
       ok: true,
@@ -161,6 +168,7 @@ export function endGameByExhaustion(state) {
       winner,
       lastAction: 'Nachziehstapel leer – Spielende durch Wertung.',
       livePreview: null,
+      finishedAt: Date.now(),
       updatedAt: Date.now(),
     },
   };
@@ -220,7 +228,22 @@ export function commitTurn(state, seat, proposed) {
     }
   }
 
-  // (3) The player must have placed at least one tile from their rack.
+  // (3) Every other tile that lay on the table at the start of the turn must
+  //     still be on the table: table tiles may be rearranged freely, but never
+  //     taken back onto a rack. (Own tiles placed during this turn may still be
+  //     taken back — they were not on the table when the turn began.)
+  const boardIdsAfter = tileIdsOfBoard(proposedBoard);
+  for (const tileId of tileIdsOfBoard(state.board)) {
+    if (!boardIdsAfter.has(tileId)) {
+      return {
+        ok: false,
+        error: 'Steine, die schon auf dem Spielfeld lagen, dürfen nicht zurück auf dein Brett.',
+        state: null,
+      };
+    }
+  }
+
+  // (4) The player must have placed at least one tile from their rack.
   if (proposedHand.length >= startHand.length) {
     return {
       ok: false,
@@ -229,7 +252,7 @@ export function commitTurn(state, seat, proposed) {
     };
   }
 
-  // (4) Every meld on the resulting board must be valid.
+  // (5) Every meld on the resulting board must be valid.
   const boardAnalysis = analyzeBoard(proposedBoard);
   if (!boardAnalysis.valid) {
     return {
@@ -241,8 +264,8 @@ export function commitTurn(state, seat, proposed) {
     };
   }
 
-  // (5) Initial-meld rule: a player who has not yet melded 30 points may not
-  //     touch existing melds and must lay down >= 30 points of brand-new tiles.
+  // (6) Initial-meld rule: a player who has not yet melded must lay down
+  //     >= 30 points in brand-new melds of their own (see validateInitialMeld).
   if (!state.hasMadeInitialMeld[seat]) {
     const initialCheck = validateInitialMeld(state.board, proposedBoard);
     if (!initialCheck.ok) return { ok: false, error: initialCheck.error, state: null };
@@ -275,6 +298,7 @@ export function commitTurn(state, seat, proposed) {
         : 'Gegner hat Steine ausgelegt.',
       lastMoves: { ...state.lastMoves, [seat]: { type: 'meld', tilesPlayed } },
       livePreview: null,
+      finishedAt: playerIsOut ? Date.now() : state.finishedAt ?? null,
       updatedAt: Date.now(),
     },
   };
