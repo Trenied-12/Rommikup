@@ -16,7 +16,7 @@ import { HistoryController } from './app/history-controller.js';
 import { RecentGamesController } from './app/recent-games-controller.js';
 import { ROOM_CODE_LENGTH } from './game/constants.js';
 import { getDeviceId } from './utils/device.js';
-import { getAppVersion, watchForUpdates } from './utils/version.js';
+import { watchForUpdates } from './utils/version.js';
 
 /** Query-string key carrying a room code in an invite link. */
 const ROOM_PARAM = 'room';
@@ -175,7 +175,6 @@ function showConfigError() {
 /** Boots the application. */
 async function bootstrap() {
   bindLobby();
-  byId('app-version').textContent = `Version ${getAppVersion()}`;
   watchForUpdates(() => {
     byId('update-banner').hidden = false;
   });

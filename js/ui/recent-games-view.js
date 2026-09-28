@@ -134,7 +134,7 @@ export function renderRecentGames(listEl, tallyEl, summaries, handlers) {
     listEl.append(
       createElement('li', {
         class: 'recent__message',
-        text: 'Noch keine Spiele. Erstelle ein neues Spiel oder tritt einem bei!',
+        text: 'Noch keine Spiele in deinem Verlauf.',
       }),
     );
     return;

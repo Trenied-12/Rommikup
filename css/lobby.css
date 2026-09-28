@@ -125,13 +125,6 @@
   font-weight: 500;
 }
 
-.lobby__version {
-  margin: var(--space-4) 0 0;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  opacity: 0.7;
-}
-
 /* ----------------------- Meine letzten Spiele ----------------------- */
 .recent {
   margin-top: var(--space-5);
